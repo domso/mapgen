@@ -7,7 +7,7 @@ The fundamental idea behind this generator is to place multiple hills/valleys
 randomly on the map. A hill is a cone with random diameter and height, while
 a valley is just an inverted hill.
 
-Heightmap with 1 hill
+Heightmap with 1 hill:
 <p float="left">
   <img src="/steps/0.png" width="45%"/>
   <img src="/steps/0_render.png" width="45%"/> 
