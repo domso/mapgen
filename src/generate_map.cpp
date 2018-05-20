@@ -10,7 +10,7 @@ struct config {
     constexpr static const int max_hill_size = 200;
     constexpr static const int min_hill_height = 2;
     constexpr static const int max_hill_height = 3;
-    constexpr static const int num_pre_blur = 20;
+    constexpr static const int num_pre_blur = 100;
     constexpr static const int num_post_blur = 20;
     
     constexpr static const int num_erosion = 2;
