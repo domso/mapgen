@@ -90,8 +90,7 @@ Add a baselevel of water:
 
 And the final result:
 <p float="left">
-  <img src="/steps/water_6.png" width="45%"/>
-  <img src="/steps/water_render_7.png" width="45%"/> 
+  <img src="/steps/water_render_7.png" width="100%"/> 
 </p>
 
 Note:
