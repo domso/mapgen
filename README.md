@@ -48,6 +48,51 @@ Final heightmap:
   <img src="/steps/4_render.png" width="45%"/> 
 </p>
 
+# Water Simulation
+
+Using the heightmap, a watermap can be created.
+
+Find the primary rivers by using erosion again:
+<p float="left">
+  <img src="/steps/water_1.png" width="45%"/>
+  <img src="/steps/water_render_1.png" width="45%"/> 
+</p>
+
+After removing some smaller rivers:
+<p float="left">
+  <img src="/steps/water_2.png" width="45%"/>
+  <img src="/steps/water_render_2.png" width="45%"/> 
+</p>
+
+Increase the width of each river:
+<p float="left">
+  <img src="/steps/water_3.png" width="45%"/>
+  <img src="/steps/water_render_3.png" width="45%"/> 
+</p>
+
+Set the correct height:
+<p float="left">
+  <img src="/steps/water_4.png" width="45%"/>
+  <img src="/steps/water_render_4.png" width="45%"/> 
+</p>
+
+Apply gaussian blur to the surrounding pixels:
+<p float="left">
+  <img src="/steps/water_5.png" width="45%"/>
+  <img src="/steps/water_render_5.png" width="45%"/> 
+</p>
+
+Add a baselevel of water:
+<p float="left">
+  <img src="/steps/water_6.png" width="45%"/>
+  <img src="/steps/water_render_6.png" width="45%"/> 
+</p>
+
+And the final result:
+<p float="left">
+  <img src="/steps/water_6.png" width="45%"/>
+  <img src="/steps/water_render_7.png" width="45%"/> 
+</p>
 
 Note:
 The heightmaps were rendered using blender.
