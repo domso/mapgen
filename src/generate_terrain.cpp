@@ -62,6 +62,35 @@ void add_erosion(std::mt19937& gen, std::vector<float>& map, const int width, co
     map = copy;
 }
 
+void fade_borders(std::vector<float>& map, const int width, const int height) {    
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < config::terrain::max_hill_size; x++) {
+            double scale = static_cast<double>(x) / static_cast<double>(config::terrain::max_hill_size);
+            map[y * width + x] *= scale;
+        }
+    }
+    for (int y = 0; y < config::terrain::max_hill_size; y++) {
+        for (int x = 0; x < width; x++) {
+            double scale = static_cast<double>(y) / static_cast<double>(config::terrain::max_hill_size);
+            map[y * width + x] *= scale;
+        }
+    }    
+    
+    for (int y = height - config::terrain::max_hill_size; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            double scale = static_cast<double>(height - y) / static_cast<double>(config::terrain::max_hill_size);
+            map[y * width + x] *= scale;
+        }
+    }    
+    
+    for (int y = 0; y < height; y++) {
+        for (int x = width - config::terrain::max_hill_size; x < width; x++) {
+            double scale = static_cast<double>(width - x) / static_cast<double>(config::terrain::max_hill_size);
+            map[y * width + x] *= scale;
+        }
+    }    
+}
+
 std::vector<float> generate_terrain(const int width, const int height) {
     std::vector<float> map(width * height);
     std::random_device rd;
@@ -76,7 +105,9 @@ std::vector<float> generate_terrain(const int width, const int height) {
     }
 
     for (int i = 0; i < config::terrain::num_hills; i++) {
-        generate_hill(gen, map, width, height, disWidth(gen), disHeight(gen), disSize(gen), config::terrain::min_hill_height, config::terrain::max_hill_height);
+        auto s = disSize(gen);
+        
+        generate_hill(gen, map, width, height, std::min(width - s, std::max(s, disWidth(gen))), std::min(height - s, std::max(s, disHeight(gen))), s, config::terrain::min_hill_height, config::terrain::max_hill_height);
     }
 
     scale_range(map);
@@ -90,6 +121,8 @@ std::vector<float> generate_terrain(const int width, const int height) {
         add_gaussian_blur(map, width, height);
     }
     scale_range(map);
+    fade_borders(map, width, height);
+    
     return map;
 }
 
