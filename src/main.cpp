@@ -120,11 +120,87 @@ std::vector<std::pair<std::vector<float>, std::pair<int, int>>> generate_tiles(s
                 }
             }
         }
-        result.push_back({img, {end_x - start_x + 1, end_y - start_y + 1}});
+        if (end_x - start_x + 1 > 50 && end_y - start_y + 1 > 50) {
+            result.push_back({img, {end_x - start_x + 1, end_y - start_y + 1}});
+        }
     }
 
     return result;
 }
+
+
+#include <cmath>
+#include <random>
+
+std::pair<std::vector<float>, std::pair<int, int>> place_tiles(std::vector<std::pair<std::vector<float>, std::pair<int, int>>>& tiles) {
+    size_t max_x = 20000;
+    size_t max_y = 20000;
+    std::vector<float> result((max_x) * (max_y));
+    std::vector<std::pair<int, int>> positions;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> dis_width(0, max_x - 1);
+    std::uniform_int_distribution<int> dis_height(0, max_y - 1);
+
+    size_t current_tile = 0;
+
+    size_t i = 1;
+    while (true) {
+        auto current_x = dis_width(gen);
+        auto current_y = dis_height(gen);
+        auto& [tile_data, tile_sizes] = tiles[current_tile];
+        auto [tile_width, tile_height] = tile_sizes;
+
+        auto current_width = max_x / 1 - i;
+        auto current_height = max_x / 1 - i;
+        i = std::min(i + 1, max_x / 1 - 1);
+
+        float scale;
+        if (tile_width > tile_height) { 
+            scale = static_cast<float>(current_width) / static_cast<float>(tile_width);
+            current_height = tile_height * scale;
+        } else {
+            scale = static_cast<float>(current_height) / static_cast<float>(tile_height);
+            current_width = tile_width * scale;
+        }
+
+        if (0 <= current_x && current_x + current_width < max_x && 0 <= current_y && current_y + current_height < max_y) {
+            bool valid = true;
+            for (auto y = current_y; y < current_y + current_height; y++) {
+                for (auto x = current_x; x < current_x + current_width; x++) {
+                    auto ptr = y * max_x + x;
+                    if (result[ptr] != 0) {
+                        valid = false;
+                        break;
+                    }
+                }
+            }
+
+            if (valid) {
+                for (auto y = current_y; y < current_y + current_height; y++) {
+                    for (auto x = current_x; x < current_x + current_width; x++) {
+                        auto dest_ptr = y * max_x + x;
+                        auto src_ptr = static_cast<size_t>(static_cast<size_t>((y - current_y) / scale) * tile_width + static_cast<size_t>(x - current_x) / scale);
+                        if (src_ptr < tile_data.size()) {
+                            result[dest_ptr] = std::max(result[dest_ptr], tile_data[src_ptr]);
+                        }
+                    }
+                }
+
+                current_tile++;
+                if (current_tile == tiles.size()) {
+                    break;
+                }
+            }
+        }
+
+    }
+
+    return {result, {max_x, max_y}};
+}
+
+
 
 int main() {
     int width = 512;
@@ -160,6 +236,8 @@ int main() {
             insert_as_tile(result, terrain_multiplier, terrain_multiplier, i, j, t, width, height);
         }
     }
+    export_ppm("terrain.ppm", width * terrain_multiplier, height * terrain_multiplier, result);
+    return 0;
 //     
 //     float m = 0;
 //     for (auto f : result) {
@@ -261,15 +339,12 @@ int main() {
     //    maskImg.push_back(static_cast<float>(p) / 10.0);
    // }
     auto tiles = generate_tiles(mask, width * terrain_multiplier, height * terrain_multiplier);
+    std::cout << "place tiles" << std::endl;
+    auto [map, map_dimensions] = place_tiles(tiles);
+    auto [map_width, map_height] = map_dimensions;
 
-    for (int i = 0; i < std::min(tiles.size(), 1000UL); i++) {
-        auto& [map, size] = tiles[i];
-        auto& [w, h] = size;
-        export_ppm("blub" + std::to_string(i) + ".ppm", w, h, map);
-    }
-
-//    export_ppm("terrain.ppm", width * terrain_multiplier, height * terrain_multiplier, maskImg);
-//    export_ppm("terrain2.ppm", width * terrain_multiplier, height * terrain_multiplier, result);
+    std::cout << "save tiles" << std::endl;
+    export_ppm("terrain.ppm", map_width, map_height, map);
 
     return 0;
 }
