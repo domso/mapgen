@@ -50,32 +50,7 @@ void insert_as_tile(std::vector<float>& map, const int rows, const int cols, con
     }
 }
 
-#include <thread>
-#include <assert.h>
 
-std::vector<std::vector<float>> generate_many_terrains(const int width, const int height, const int count, const int num_threads) {
-    assert(num_threads > 0);
-    std::vector<std::vector<float>> result(count);
-    std::vector<std::thread> threads;
-
-    int work_per_thread = count / num_threads;
-    for (int i = 0; i < num_threads; i++) {
-        threads.emplace_back([&, start = i * work_per_thread, end = std::min((i + 1) * work_per_thread, count)]() {
-            for (int i = start; i < end; i++) {
-                std::cout << i << " " << std::endl;
-                result[i] = generate_terrain(width, height);
-            }
-        });
-    }
-
-    for (auto& t : threads) {
-        if (t.joinable()) {
-            t.join();
-        }
-    }
-
-    return result;
-}
 
 #include <unordered_map>
 
@@ -110,25 +85,32 @@ std::vector<std::pair<std::vector<float>, std::pair<int, int>>> generate_tiles(s
         auto& [start_x, start_y] = start;
         auto& [end_x, end_y] = end;
 
-        std::vector<float> img;
-        for (int y = start_y; y <= end_y; y++) {
-            for (int x = start_x; x <= end_x; x++) {
-                if (mask[y * width + x] == key) {
-                    img.push_back(1.0);
-                } else {
-                    img.push_back(0.0);
+        if (end_x - start_x > 10 && end_y - start_y > 10) {
+            std::vector<float> img;
+            for (int y = start_y; y <= end_y; y++) {
+                for (int x = start_x; x <= end_x; x++) {
+                    if (mask[y * width + x] == key) {
+                        img.push_back(1.0);
+                    } else {
+                        img.push_back(0.0);
+                    }
                 }
             }
+            result.push_back({img, {end_x - start_x + 1, end_y - start_y + 1}});
         }
-        result.push_back({img, {end_x - start_x + 1, end_y - start_y + 1}});
     }
 
     return result;
 }
 
+#include "terrain_buffer.h"
 int main() {
     int width = 512;
     int height = 512;
+
+    terrain_buffer buffer(width, height, 128);
+
+
 
     std::vector<float> terrain = generate_terrain(width, height);
 //     std::vector<float> terrain2 = generate_terrain(width, height);
@@ -153,10 +135,9 @@ int main() {
     int terrain_multiplier = 40;
     std::vector<float> result(width * height * terrain_multiplier * terrain_multiplier);
     
-    auto terrains = generate_many_terrains(width, height, terrain_multiplier * terrain_multiplier, 8); 
     for (int i = 0; i < terrain_multiplier; i++) {  
         for (int j = 0; j < terrain_multiplier; j++) {            
-            std::vector<float>& t = terrains[i * terrain_multiplier + j];
+            std::vector<float> t = buffer.pop();
             insert_as_tile(result, terrain_multiplier, terrain_multiplier, i, j, t, width, height);
         }
     }
@@ -261,12 +242,12 @@ int main() {
     //    maskImg.push_back(static_cast<float>(p) / 10.0);
    // }
     auto tiles = generate_tiles(mask, width * terrain_multiplier, height * terrain_multiplier);
-
-    for (int i = 0; i < std::min(tiles.size(), 1000UL); i++) {
-        auto& [map, size] = tiles[i];
-        auto& [w, h] = size;
-        export_ppm("blub" + std::to_string(i) + ".ppm", w, h, map);
-    }
+    std::cout << tiles.size() << std::endl;
+//    for (int i = 0; i < std::min(tiles.size(), 1000UL); i++) {
+//        auto& [map, size] = tiles[i];
+//        auto& [w, h] = size;
+//        export_ppm("blub" + std::to_string(i) + ".ppm", w, h, map);
+//    }
 
 //    export_ppm("terrain.ppm", width * terrain_multiplier, height * terrain_multiplier, maskImg);
 //    export_ppm("terrain2.ppm", width * terrain_multiplier, height * terrain_multiplier, result);
