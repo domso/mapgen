@@ -50,32 +50,7 @@ void insert_as_tile(std::vector<float>& map, const int rows, const int cols, con
     }
 }
 
-#include <thread>
-#include <assert.h>
 
-std::vector<std::vector<float>> generate_many_terrains(const int width, const int height, const int count, const int num_threads) {
-    assert(num_threads > 0);
-    std::vector<std::vector<float>> result(count);
-    std::vector<std::thread> threads;
-
-    int work_per_thread = count / num_threads;
-    for (int i = 0; i < num_threads; i++) {
-        threads.emplace_back([&, start = i * work_per_thread, end = std::min((i + 1) * work_per_thread, count)]() {
-            for (int i = start; i < end; i++) {
-                std::cout << i << " " << std::endl;
-                result[i] = generate_terrain(width, height);
-            }
-        });
-    }
-
-    for (auto& t : threads) {
-        if (t.joinable()) {
-            t.join();
-        }
-    }
-
-    return result;
-}
 
 #include <unordered_map>
 
@@ -110,15 +85,18 @@ std::vector<std::pair<std::vector<float>, std::pair<int, int>>> generate_tiles(s
         auto& [start_x, start_y] = start;
         auto& [end_x, end_y] = end;
 
-        std::vector<float> img;
-        for (int y = start_y; y <= end_y; y++) {
-            for (int x = start_x; x <= end_x; x++) {
-                if (mask[y * width + x] == key) {
-                    img.push_back(1.0);
-                } else {
-                    img.push_back(0.0);
+        if (end_x - start_x > 10 && end_y - start_y > 10) {
+            std::vector<float> img;
+            for (int y = start_y; y <= end_y; y++) {
+                for (int x = start_x; x <= end_x; x++) {
+                    if (mask[y * width + x] == key) {
+                        img.push_back(1.0);
+                    } else {
+                        img.push_back(0.0);
+                    }
                 }
             }
+            result.push_back({img, {end_x - start_x + 1, end_y - start_y + 1}});
         }
         if (end_x - start_x + 1 > 50 && end_y - start_y + 1 > 50) {
             result.push_back({img, {end_x - start_x + 1, end_y - start_y + 1}});
@@ -202,9 +180,16 @@ std::pair<std::vector<float>, std::pair<int, int>> place_tiles(std::vector<std::
 
 
 
+=======
+#include "terrain_buffer.h"
+>>>>>>> 7f4cd70d30f40c4edefd14e492df9a828f0122bf
 int main() {
     int width = 512;
     int height = 512;
+
+    terrain_buffer buffer(width, height, 128);
+
+
 
     std::vector<float> terrain = generate_terrain(width, height);
 //     std::vector<float> terrain2 = generate_terrain(width, height);
@@ -229,10 +214,9 @@ int main() {
     int terrain_multiplier = 40;
     std::vector<float> result(width * height * terrain_multiplier * terrain_multiplier);
     
-    auto terrains = generate_many_terrains(width, height, terrain_multiplier * terrain_multiplier, 8); 
     for (int i = 0; i < terrain_multiplier; i++) {  
         for (int j = 0; j < terrain_multiplier; j++) {            
-            std::vector<float>& t = terrains[i * terrain_multiplier + j];
+            std::vector<float> t = buffer.pop();
             insert_as_tile(result, terrain_multiplier, terrain_multiplier, i, j, t, width, height);
         }
     }
