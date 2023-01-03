@@ -10,7 +10,7 @@ terrain_buffer::terrain_buffer(const int width, const int height, const int coun
     }
 }
 
-std::vector<float> terrain_buffer::pop() {
+image<float> terrain_buffer::pop() {
     std::unique_lock ul(m_mutex);
     if (m_buffer.empty()) {
         ul.unlock();
@@ -23,6 +23,11 @@ std::vector<float> terrain_buffer::pop() {
     }
 }
 
+void terrain_buffer::stop() {
+    std::unique_lock ul(m_mutex);
+    m_count = 0;    
+}
+
 void terrain_buffer::start_regeneration() {
     {
         std::unique_lock ul(m_mutex);
@@ -33,16 +38,19 @@ void terrain_buffer::start_regeneration() {
 
     std::thread t1([&]() {
         if (m_current_num_threads < std::thread::hardware_concurrency()) {
+            std::unique_lock ul(m_mutex);
             m_current_num_threads++; 
             while(true) {
-                std::unique_lock ul(m_mutex);
                 if (m_buffer.size() < m_count) {
-                    std::vector<float> new_terrain;
+                    std::vector<image<float>> new_terrains;
                     ul.unlock();
-                    new_terrain = generate_terrain(m_width, m_height);
+                    for (int i = 0; i < 16; i++) {
+                        new_terrains.push_back(std::move(generate_terrain(m_width, m_height)));
+                    }
                     ul.lock();
-                    std::cout << "generate terrain " << std::this_thread::get_id() << " " << m_buffer.size() << std::endl;
-                    m_buffer.push_back(std::move(new_terrain));
+                    for (auto& v : new_terrains) {
+                        m_buffer.push_back(std::move(v));
+                    }
                 } else {
                     return;
                 }

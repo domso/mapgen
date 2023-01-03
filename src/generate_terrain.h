@@ -1,5 +1,9 @@
 #pragma once
 
 #include <vector>
+#include <random>
 
-std::vector<float> generate_terrain(const int width, const int height);
+#include "image.h"
+
+void add_erosion(std::mt19937& gen, image<float>& map);
+image<float> generate_terrain(const int width, const int height);

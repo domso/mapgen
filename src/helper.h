@@ -3,18 +3,18 @@
 #include <random>
 #include <vector>
 
-#include "helper.h"
+#include "image.h"
 
 bool random_percentage(std::mt19937& gen, const int percent);
 
-float calc_distance(const int x, const int y, const int halfSize, const int i, const int j);
+float calc_distance(const int x, const int y, const int half_size, const int i, const int j);
 
-void add_gaussian_blur(std::vector<float>& map, const int width, const int height);
+void add_gaussian_blur(image<float>& img);
 
-void scale_range(std::vector<float>& map);
+void scale_range(image<float>& img);
 
-int min_random_neighbor(std::mt19937& gen, const std::vector<float>& map, const int width, const int height, const int x, const int y);
+std::pair<int, int> min_random_neighbor(std::mt19937& gen, const image<float>& map, const int x, const int y);
 
-int min_neighbor(const std::vector<float>& map, const int width, const int height, const int x, const int y);
+std::pair<int, int> min_neighbor(const image<float>& map, const int x, const int y);
 
 

@@ -5,82 +5,95 @@ bool random_percentage(std::mt19937& gen, const int percent) {
     return dis(gen) <= percent;
 }
 
-float calc_distance(const int x, const int y, const int halfSize, const int i, const int j) {
-    int diffX = x - (x - halfSize + i);
-    int diffY = y - (y - halfSize + j);
+float calc_distance(const int x, const int y, const int half_size, const int i, const int j) {
+    int diff_x = x - (x - half_size + i);
+    int diff_y = y - (y - half_size + j);
 
-    return std::sqrt(diffX * diffX + diffY * diffY);
+    return std::sqrt(diff_x * diff_x + diff_y * diff_y);
 }
 
-void add_gaussian_blur(std::vector<float>& map, const int width, const int height) {
-    std::vector<float> copy = map;
-    std::vector<int> kernel = {1,2,1,2,4,2,1,2,1};
+void add_gaussian_blur(image<float>& img) {
+    image<float> copy(img.width(), img.height(), 0.0);
 
-    for (int j = 0; j < height; j++) {
-        for (int i = 0; i < width; i++) {
-            float tmp = 0;
-            float scale = 0;
-            
-            for (int offset = 0; offset < 9; offset++) {
-                int index = (j - 1 + offset / 3) * width + (i - 1 + offset % 3);
-                if (index >= 0 && index < map.size()) {
-                    tmp += map[index] * kernel[offset];
-                    scale += kernel[offset];                    
-                }
-            }
+    for (int j = 1; j < copy.height() - 1; j++) {
+        for (int i = 1; i < copy.width() - 1; i++) {
+            auto pixel = img.at(i, j);
 
-            copy[j * width + i] = tmp / scale;
+            copy.at(i - 1 + 0, j - 1 + 0) += pixel * 1;
+            copy.at(i - 1 + 1, j - 1 + 0) += pixel * 2;
+            copy.at(i - 1 + 2, j - 1 + 0) += pixel * 1;
+            copy.at(i - 1 + 0, j - 1 + 1) += pixel * 2;
+            copy.at(i - 1 + 1, j - 1 + 1) += pixel * 4;
+            copy.at(i - 1 + 2, j - 1 + 1) += pixel * 2;
+            copy.at(i - 1 + 0, j - 1 + 2) += pixel * 1;
+            copy.at(i - 1 + 1, j - 1 + 2) += pixel * 2;
+            copy.at(i - 1 + 2, j - 1 + 2) += pixel * 1;
         }
     }
 
-    map = copy;
+    copy.for_each_pixel([](float& p) {
+        p /= 16;
+    });
+
+    for (int j = 0; j < copy.height(); j++) {
+        copy.at(0, j) = img.at(0, j);
+        copy.at(copy.width() - 1, j) = img.at(img.width() - 1, j);
+    }
+    for (int i = 0; i < copy.width(); i++) {
+        copy.at(i, 0) = img.at(i, 0);
+        copy.at(i, copy.height() - 1) = img.at(i, copy.height() - 1);
+    }
+
+    img = std::move(copy);
 }
 
-void scale_range(std::vector<float>& map) {
+void scale_range(image<float>& img) {
     float min = MAXFLOAT;
     float max = 0;
 
-    for (auto f : map) {
+    img.for_each_pixel([&](float& f) {
         min = std::min<float>(min, f);
         max = std::max<float>(max, f);
-    }
-
-    for (auto& f : map) {
+    });
+    img.for_each_pixel([&](float& f) {
         f = (f - min) * (1.0 / (max - min));
-    }
+    });
 }
 
-int min_random_neighbor(std::mt19937& gen, const std::vector<float>& map, const int width, const int height, const int x, const int y) {
-    int result = y * width + x;
-    float min = map[result];
-    
-    for (int offset = 0; offset < 9; offset++) {
-        int index = (y - 1 + offset / 3) * width + (x - 1 + offset % 3);
-        if (index >= 0 && index < map.size()) {            
-            if (map[index] < min && random_percentage(gen, 50)) {
-                result = index;
-                min = map[index];
+std::pair<int, int> min_random_neighbor(std::mt19937& gen, const image<float>& map, const int x, const int y) {
+    std::pair<int, int> result = {x, y};
+    float min = map.at(x, y);
+
+    for (int dy = -1; dy < 2; dy++) {
+        for (int dx = -1; dx < 2; dx++) {
+            if (map.contains(x + dx, y + dy)) {
+                if (map.at(x + dx, y + dy) < min && random_percentage(gen, 50)) {
+                    result = {x + dx, y + dy};
+                    min = map.at(x + dx, y + dy);
+                }
             }
+
         }
     }
-
+    
     return result;
 }
 
-int min_neighbor(const std::vector<float>& map, const int width, const int height, const int x, const int y) {
-    int result = y * width + x;
-    float min = map[result];
-    
-    for (int offset = 0; offset < 9; offset++) {
-        int index = (y - 1 + offset / 3) * width + (x - 1 + offset % 3);
-        if (index >= 0 && index < map.size()) {            
-            if (map[index] < min) {
-                result = index;
-                min = map[index];
+std::pair<int, int> min_neighbor(const image<float>& map, const int x, const int y) {
+    std::pair<int, int> result = {x, y};
+    float min = map.at(x, y);
+
+    for (int dy = -1; dy < 2; dy++) {
+        for (int dx = -1; dx < 2; dx++) {
+            if (map.contains(x + dx, y + dy)) {
+                if (map.at(x + dx, y + dy) < min) {
+                    result = {x + dx, y + dy};
+                    min = map.at(x + dx, y + dy);
+                }
             }
+
         }
     }
-
+    
     return result;
 }
-

@@ -1,5 +1,6 @@
 #pragma once
 
 #include <vector>
+#include "image.h"
 
-std::vector<float> generate_water(const std::vector<float>& terrain, const int width, const int height);
+image<float> generate_water(const image<float>& terrain);

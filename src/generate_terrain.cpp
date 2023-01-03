@@ -4,32 +4,26 @@
 #include "config.h"
 #include "helper.h"
 
-bool check_boundaries(const int x, const int y, const int halfSize, const int width, const int height, const int i, const int j) {
-    return
-        (x - halfSize + i) >= 0 &&
-        (x - halfSize + i) < width &&
-        (y - halfSize + j) >= 0 &&
-        (y - halfSize + j) < height;
-}
-
-void generate_hill(std::mt19937& gen, std::vector<float>& map, const int width, const int height, const int x, const int y, const int size, const int min, const int max) {
+void generate_hill(std::mt19937& gen, image<float>& map, const int x, const int y, const int size, const int min, const int max) {
     std::uniform_int_distribution<int> dis(min, max);
-    float setHeight = dis(gen);
-    int fixedSize = size & (~1);
-    int halfSize = fixedSize / 2;
+    float set_height = dis(gen);
+    int fixed_size = size & (~1);
+    int half_size = fixed_size / 2;
     bool substract = random_percentage(gen, 50);
     
-    for (int j = 0; j <= fixedSize; j++) {
-        for (int i = 0; i <= fixedSize; i++) {
-            if (check_boundaries(x, y, halfSize, width, height, i, j)) {
-                float distance = calc_distance(x, y, halfSize, i, j);
-                if (distance <= halfSize) {
-                    int index = (y - halfSize + j) * width + (x - halfSize + i);
-                    float offset = (setHeight - (setHeight / halfSize) * distance);
+    for (int j = 0; j <= fixed_size; j++) {
+        for (int i = 0; i <= fixed_size; i++) {
+            int dest_x = x - half_size + i;
+            int dest_y = y - half_size + j;
+
+            if (map.contains(dest_x, dest_y)) {
+                float distance = calc_distance(x, y, half_size, i, j);
+                if (distance <= half_size) {
+                    float offset = (set_height - (set_height / half_size) * distance);
                     if (!substract) {
-                        map[index] += offset;
+                        map.at(dest_x, dest_y) += offset;
                     } else {
-                        map[index] -= std::min<float>(map[index], offset);
+                        map.at(dest_x, dest_y) -= std::min<float>(map.at(dest_x, dest_y), offset);
                     }
                 }
             }
@@ -37,22 +31,21 @@ void generate_hill(std::mt19937& gen, std::vector<float>& map, const int width, 
     }
 }
 
-void add_erosion(std::mt19937& gen, std::vector<float>& map, const int width, const int height) {
-    std::vector<float> erosionMap(width * height, 1);
-    std::vector<float> copy = map;
+void add_erosion(std::mt19937& gen, image<float>& map) {
+    image<float> erosion_map(map.width(), map.height(), 1);
+    auto copy = map;
 
     for (int it = 0; it < config::terrain::num_erosion; it++) {
-        for (int j = 0; j < height; j++) {
-            for (int i = 0; i < width; i++) {
-                int current = (j * width) + i;
-                if (erosionMap[current] > 0) {
-                    int min = min_random_neighbor(gen, map, width, height, i, j);
+        for (int j = 0; j < map.height(); j++) {
+            for (int i = 0; i < map.width(); i++) {
+                if (erosion_map.at(i, j) > 0) {
+                    auto [min_x, min_y] = min_random_neighbor(gen, map, i, j);
                     
-                    if (min != current) {
-                        erosionMap[current] -= 1;
-                        erosionMap[min] += 1;
-                        copy[current] *= config::terrain::erosion_factor;
-                        copy[min] *= config::terrain::erosion_factor;
+                    if (min_x != i || min_y != j) {
+                        erosion_map.at(i, j) -= 1;
+                        erosion_map.at(min_x, min_y) += 1;
+                        copy.at(i, j) *= config::terrain::erosion_factor;
+                        copy.at(min_x, min_y) *= config::terrain::erosion_factor;
                     }
                 }
             }
@@ -62,70 +55,67 @@ void add_erosion(std::mt19937& gen, std::vector<float>& map, const int width, co
     map = copy;
 }
 
-void fade_borders(std::vector<float>& map, const int width, const int height) {    
-    for (int y = 0; y < height; y++) {
+void fade_borders(image<float>& map) {    
+    for (int y = 0; y < map.height(); y++) {
         for (int x = 0; x < config::terrain::max_hill_size; x++) {
             double scale = static_cast<double>(x) / static_cast<double>(config::terrain::max_hill_size);
-            map[y * width + x] *= scale;
+            map.at(x, y) *= scale;
         }
     }
     for (int y = 0; y < config::terrain::max_hill_size; y++) {
-        for (int x = 0; x < width; x++) {
+        for (int x = 0; x < map.width(); x++) {
             double scale = static_cast<double>(y) / static_cast<double>(config::terrain::max_hill_size);
-            map[y * width + x] *= scale;
+            map.at(x, y) *= scale;
         }
     }    
     
-    for (int y = height - config::terrain::max_hill_size; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            double scale = static_cast<double>(height - y) / static_cast<double>(config::terrain::max_hill_size);
-            map[y * width + x] *= scale;
+    for (int y = map.height() - config::terrain::max_hill_size; y < map.height(); y++) {
+        for (int x = 0; x < map.width(); x++) {
+            double scale = static_cast<double>(map.height() - y) / static_cast<double>(config::terrain::max_hill_size);
+            map.at(x, y) *= scale;
         }
     }    
     
-    for (int y = 0; y < height; y++) {
-        for (int x = width - config::terrain::max_hill_size; x < width; x++) {
-            double scale = static_cast<double>(width - x) / static_cast<double>(config::terrain::max_hill_size);
-            map[y * width + x] *= scale;
+    for (int y = 0; y < map.height(); y++) {
+        for (int x = map.width() - config::terrain::max_hill_size; x < map.width(); x++) {
+            double scale = static_cast<double>(map.width() - x) / static_cast<double>(config::terrain::max_hill_size);
+            map.at(x, y) *= scale;
         }
     }    
 }
 
-std::vector<float> generate_terrain(const int width, const int height) {
-    std::vector<float> map(width * height);
+image<float> generate_terrain(const int width, const int height) {
+    image<float> map(width, height);
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<int> dis(config::terrain::min_base_noise, config::terrain::max_base_noise);
-    std::uniform_int_distribution<int> disWidth(0, width - 1);
-    std::uniform_int_distribution<int> disHeight(0, height - 1);
-    std::uniform_int_distribution<int> disSize(config::terrain::min_hill_size, config::terrain::max_hill_size);
+    std::uniform_int_distribution<int> dis_width(0, width - 1);
+    std::uniform_int_distribution<int> dis_height(0, height - 1);
+    std::uniform_int_distribution<int> dis_size(config::terrain::min_hill_size, config::terrain::max_hill_size);
 
-    for (auto& i : map) {
-        i = dis(gen);
-    }
+
+    map.for_each_pixel([&](float& p) {
+        p = dis(gen);
+    });
 
     for (int i = 0; i < config::terrain::num_hills; i++) {
-        auto s = disSize(gen);
+        auto s = dis_size(gen);
         
-        generate_hill(gen, map, width, height, std::min(width - s, std::max(s, disWidth(gen))), std::min(height - s, std::max(s, disHeight(gen))), s, config::terrain::min_hill_height, config::terrain::max_hill_height);
+        generate_hill(gen, map, std::min(width - s, std::max(s, dis_width(gen))), std::min(height - s, std::max(s, dis_height(gen))), s, config::terrain::min_hill_height, config::terrain::max_hill_height);
     }
 
     scale_range(map);
     for (int i = 0; i < config::terrain::num_pre_blur; i++) {
-        add_gaussian_blur(map, width, height);
+        add_gaussian_blur(map);
     }
 
-    add_erosion(gen, map, width, height);
+    add_erosion(gen, map);
     
     for (int i = 0; i < config::terrain::num_post_blur; i++) {
-        add_gaussian_blur(map, width, height);
+        add_gaussian_blur(map);
     }
     scale_range(map);
-    fade_borders(map, width, height);
+    fade_borders(map);
     
     return map;
 }
-
-
-
-
