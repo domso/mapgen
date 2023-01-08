@@ -97,3 +97,61 @@ std::pair<int, int> min_neighbor(const image<float>& map, const int x, const int
     
     return result;
 }
+
+image<float> downscale_img(const image<float>& src, const size_t dest_width, const size_t dest_height) {
+    image<float> result(dest_width, dest_height, 0.0);
+
+    result.for_each_pixel([&](float& p, const size_t x, const size_t y) {
+        auto vertical_fraction = static_cast<double>(y) / dest_height;
+        auto horizontal_fraction = static_cast<double>(x) / dest_width;
+
+        auto src_x = static_cast<size_t>(horizontal_fraction * src.width());
+        auto src_y = static_cast<size_t>(vertical_fraction * src.height());
+
+        if (src.contains(src_x, src_y)) {
+            p = src.at(src_x, src_y);
+        }
+    });
+
+    add_gaussian_blur(result);
+    add_gaussian_blur(result);
+    add_gaussian_blur(result);
+    add_gaussian_blur(result);
+
+    return result;
+}
+
+image<float> extract_non_zero_region(const image<float>& img) {
+    size_t min_x = img.width();
+    size_t max_x = 0;
+    size_t min_y = img.height();
+    size_t max_y = 0;
+
+    img.for_each_pixel([&](const float& p, const size_t x, const size_t y) {
+        if (p > 0) {
+            min_x = std::min(min_x, x);
+            max_x = std::max(max_x, x);
+            min_y = std::min(min_y, y);
+            max_y = std::max(max_y, y);
+        }
+    });
+    
+    image<float> result(max_x, max_y);
+
+    if (auto region = img.subregion(0, 0, max_x, max_y)) {
+        region->copy_to(result);
+    }
+
+    return result;
+}
+
+image<float> extract_background(const image<float>& img, const float threshold) {
+    auto base_background = img;
+    base_background.for_each_pixel([threshold](float& f) {
+        if (f > threshold) {
+            f = threshold;
+        }
+    });
+
+    return extract_non_zero_region(base_background);
+}

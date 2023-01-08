@@ -17,4 +17,9 @@ std::pair<int, int> min_random_neighbor(std::mt19937& gen, const image<float>& m
 
 std::pair<int, int> min_neighbor(const image<float>& map, const int x, const int y);
 
+image<float> downscale_img(const image<float>& src, const size_t dest_width, const size_t dest_height);
+
+image<float> extract_non_zero_region(const image<float>& img);
+
+image<float> extract_background(const image<float>& img, const float threshold);
 

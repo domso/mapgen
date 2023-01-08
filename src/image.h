@@ -64,11 +64,11 @@ public:
         return 0 <= x && x < m_width && 0 <= y && y < m_height;
     }
     bool contains(const int x, const int y, const int width, const int height) const {
-        return 0 <= x && x < m_width && 0 <= y && y < m_height && 0 <= x + width && x + width < m_width && 0 <= y + height && y + height < m_height;
+        return 0 <= x && x < m_width && 0 <= y && y < m_height && 0 <= x + width && x + width <= m_width && 0 <= y + height && y + height <= m_height;
     }
     const T& at(const int x, const int y) const {
         size_t ptr = m_offset + y * m_row_stride + x;
-        return (*m_data)[ptr];
+        return m_direct_data[ptr];
     }
     T& at(const int x, const int y) {
         size_t ptr = m_offset + y * m_row_stride + x;
@@ -135,7 +135,7 @@ public:
             }
         }
     }
-    std::optional<image> subregion(const int x, const int y, const int width, const int height) {
+    std::optional<image> subregion(const int x, const int y, const int width, const int height) const {
         if (contains(x, y, width, height)) {
             image result;
             result.m_width = width;
@@ -166,7 +166,7 @@ public:
     }
     std::pair<T, T> range() const {
         T min = std::numeric_limits<T>::max();
-        T max = std::numeric_limits<T>::min();
+        T max = std::numeric_limits<T>::lowest();
 
         for (size_t y = 0; y < m_height; y++) {
             for (size_t x = 0; x < m_width; x++) {
@@ -176,6 +176,13 @@ public:
         }
        
         return {min, max};
+    }
+    void apply_lower_threshold(const T& v, const T& s) {
+        for_each_pixel([v, s](float& f) {
+            if (f <= v) {
+                f = s;
+            }
+        });
     }
 private:
     image() {}

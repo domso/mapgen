@@ -44,9 +44,7 @@ void terrain_buffer::start_regeneration() {
                 if (m_buffer.size() < m_count) {
                     std::vector<image<float>> new_terrains;
                     ul.unlock();
-                    for (int i = 0; i < 16; i++) {
-                        new_terrains.push_back(std::move(generate_terrain(m_width, m_height)));
-                    }
+                    new_terrains.push_back(std::move(generate_terrain(m_width, m_height)));
                     ul.lock();
                     for (auto& v : new_terrains) {
                         m_buffer.push_back(std::move(v));
