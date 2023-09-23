@@ -7,3 +7,4 @@
 
 void add_erosion(std::mt19937& gen, image<float>& map);
 image<float> generate_terrain(const int width, const int height);
+image<float> generate_unfaded_terrain(const int width, const int height);

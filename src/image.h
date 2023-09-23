@@ -164,6 +164,13 @@ public:
             }
         }
     }
+    void mix_max(const image& src) {
+        for (size_t y = 0; y < std::min(m_height, src.m_height); y++) {
+            for (size_t x = 0; x < std::min(m_width, src.m_width); x++) {
+                this->at(x, y) = std::max(this->at(x, y), src.at(x, y));
+            }
+        }
+    }
     std::pair<T, T> range() const {
         T min = std::numeric_limits<T>::max();
         T max = std::numeric_limits<T>::lowest();
@@ -183,6 +190,37 @@ public:
                 f = s;
             }
         });
+    }
+    void mirror_vertical() {
+        for (size_t y = 0; y < m_height; y++) {
+            for (size_t x = 0; x < m_width / 2; x++) {
+                std::swap(at(x, y), at(m_width - 1 - x, y));
+            }
+        }
+    }
+    void mirror_horizontal() {
+        for (size_t y = 0; y < m_height / 2; y++) {
+            for (size_t x = 0; x < m_width; x++) {
+                std::swap(at(x, y), at(x, m_height - 1 - y));
+            }
+        }
+    }
+    image<T> rescale(const size_t new_width, const size_t new_height) const {
+        image<T> result(new_width, new_height);
+        
+        result.for_each_pixel([&](auto& p, auto x, auto y) {
+            auto scale_x = static_cast<float>(x) / new_width;
+            auto scale_y = static_cast<float>(y) / new_height;
+            
+            size_t ref_x = scale_x * m_width;
+            size_t ref_y = scale_y * m_height;
+
+            if (this->contains(ref_x, ref_y)) {
+                p = this->at(ref_x, ref_y);
+            }
+        });
+
+        return result;
     }
 private:
     image() {}

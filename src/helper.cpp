@@ -14,34 +14,28 @@ float calc_distance(const int x, const int y, const int half_size, const int i, 
 
 void add_gaussian_blur(image<float>& img) {
     image<float> copy(img.width(), img.height(), 0.0);
+    std::vector<int> kernel = {1, 2, 1, 2, 4, 2, 1, 2, 1};
 
     for (int j = 1; j < copy.height() - 1; j++) {
-        for (int i = 1; i < copy.width() - 1; i++) {
-            auto pixel = img.at(i, j);
+        for (int i = 0; i < copy.width(); i++) {
+            int i_is_first = static_cast<int>(i == 0);
+            int i_is_last = static_cast<int>(i == copy.width() - 1);
+            int j_is_first = static_cast<int>(j == 0);
+            int j_is_last = static_cast<int>(j == copy.height() - 1);
 
-            copy.at(i - 1 + 0, j - 1 + 0) += pixel * 1;
-            copy.at(i - 1 + 1, j - 1 + 0) += pixel * 2;
-            copy.at(i - 1 + 2, j - 1 + 0) += pixel * 1;
-            copy.at(i - 1 + 0, j - 1 + 1) += pixel * 2;
-            copy.at(i - 1 + 1, j - 1 + 1) += pixel * 4;
-            copy.at(i - 1 + 2, j - 1 + 1) += pixel * 2;
-            copy.at(i - 1 + 0, j - 1 + 2) += pixel * 1;
-            copy.at(i - 1 + 1, j - 1 + 2) += pixel * 2;
-            copy.at(i - 1 + 2, j - 1 + 2) += pixel * 1;
+            int w = j_is_first * 3;
+            float factor = 0.0;
+            for (int kj = -1 + j_is_first; kj <= 1 - j_is_last; kj++) {
+                w += i_is_first;
+                for (int ki = -1 + i_is_first; ki <= 1 - i_is_last; ki++) {
+                    copy.at(i, j) += img.at(i + ki, j + kj) * kernel[w];
+                    factor += kernel[w];
+                    w++;
+                }
+                w += i_is_last;
+            }
+            copy.at(i, j) /= factor;
         }
-    }
-
-    copy.for_each_pixel([](float& p) {
-        p /= 16;
-    });
-
-    for (int j = 0; j < copy.height(); j++) {
-        copy.at(0, j) = img.at(0, j);
-        copy.at(copy.width() - 1, j) = img.at(img.width() - 1, j);
-    }
-    for (int i = 0; i < copy.width(); i++) {
-        copy.at(i, 0) = img.at(i, 0);
-        copy.at(i, copy.height() - 1) = img.at(i, copy.height() - 1);
     }
 
     img = std::move(copy);

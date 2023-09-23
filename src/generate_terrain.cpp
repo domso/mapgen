@@ -85,6 +85,13 @@ void fade_borders(image<float>& map) {
 }
 
 image<float> generate_terrain(const int width, const int height) {
+    auto map = generate_unfaded_terrain(width, height);
+    fade_borders(map);
+    
+    return map;
+}
+
+image<float> generate_unfaded_terrain(const int width, const int height) {
     image<float> map(width, height);
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -102,6 +109,7 @@ image<float> generate_terrain(const int width, const int height) {
         auto s = dis_size(gen);
         
         generate_hill(gen, map, std::min(width - s, std::max(s, dis_width(gen))), std::min(height - s, std::max(s, dis_height(gen))), s, config::terrain::min_hill_height, config::terrain::max_hill_height);
+        //generate_hill(gen, map, dis_width(gen), dis_height(gen), s, config::terrain::min_hill_height, config::terrain::max_hill_height);
     }
 
     scale_range(map);
@@ -115,7 +123,6 @@ image<float> generate_terrain(const int width, const int height) {
         add_gaussian_blur(map);
     }
     scale_range(map);
-    fade_borders(map);
     
     return map;
 }
