@@ -24,46 +24,6 @@
 #include <cmath>
 #include <random>
 
-template<typename Tcall>
-void draw_line(image<float>& img, int start_x, int start_y, int end_x, int end_y, const Tcall& call) {
-    // Calculate the delta values for x and y
-    int dx = abs(end_x - start_x);
-    int dy = abs(end_y - start_y);
-
-    // Determine the direction of movement in x and y
-    int sx = (start_x < end_x) ? 1 : -1;
-    int sy = (start_y < end_y) ? 1 : -1;
-
-    // Initialize error term
-    int err = dx - dy;
-
-    // Initialize current position
-    int x = start_x;
-    int y = start_y;
-
-    // Loop to plot the points
-    while (true) {
-
-        // Check if we've reached the end point
-        if (x == end_x && y == end_y) {
-            break;
-        }
-
-        // Calculate the next position
-        int e2 = 2 * err;
-        if (e2 > -dy) {
-            err -= dy;
-            x += sx;
-        }
-        if (e2 < dx) {
-            err += dx;
-            y += sy;
-        }
-
-        // Plot the current point
-        call(img.at(x, y), x, y);
-    }
-}
 
 bool update_paths_from_neighbors(image<std::pair<float, int>>& positions, const size_t src_x, const size_t src_y, const size_t dest_x, const size_t dest_y, const float delta, const int delta_step) {
     auto [score, step] = positions.at(src_x, src_y);
@@ -183,32 +143,6 @@ image<std::pair<float, int>> generate_path(const image<float>& terrain, size_t s
 }
 
 
-
-/*
-        for (int i = -margin; i < margin; i++) {                                                                                                                                                                         
-            for (int j = -margin; j < margin; j++) {
-                auto n2 = current_y * width + current_x + j * width + i;
-                    
-                float quadlen = i * i + j * j;
-                float m = static_cast<float>(margin);
-                m *= m;
-
-                if (n2 < result.size() && quadlen < m) {
-                    float s = (m - quadlen);
-                    s = s * s * s * s * s * s * s * s;
-                    m = m * m * m * m * m * m * m * m;
-                    
-
-                    if (s > 0) {
-                        result[n2] = std::max(result[n2], current_temp * (s / (m)));
-                        //current_temp * (s / m);
-                    }   
-                }   
-            }   
-        }   
-*/
-int margin = 100;
-
 void export_path_img(image<float>& result, image<float>& heights, const image<float>& terrain, const image<std::pair<float, int>>& path_map, const int dest_x, const int dest_y, const int scale) {
     int current_x = dest_x;
     int current_y = dest_y;
@@ -229,10 +163,23 @@ void export_path_img(image<float>& result, image<float>& heights, const image<fl
                 skip_first = false;
                 current_height = terrain.at(current_x, current_y);
             } else if (result.at(current_x, current_y) >= 0.0) {
-                draw_line(result, scale * prev_x, scale * prev_y, scale * current_x, scale * current_y, [](auto& f, auto x, auto y) {f += 1.0;});
+                bool skip_first_draw = true;
+                result.draw_line(scale * prev_x, scale * prev_y, scale * current_x, scale * current_y, [&](auto& f, auto x, auto y) {
+                    if (skip_first_draw) {
+                        skip_first_draw = false;
+                        return;
+                    }
 
+                    f += 1.0;
+                });
 
-                draw_line(heights, scale * prev_x, scale * prev_y, scale * current_x, scale * current_y, [&](auto& f, auto x, auto y) {
+                skip_first_draw = true;
+                heights.draw_line(scale * prev_x, scale * prev_y, scale * current_x, scale * current_y, [&](auto& f, auto x, auto y) {
+                    if (skip_first_draw) {
+                        skip_first_draw = false;
+                        return;
+                    }
+
                     current_height = std::min(current_height, terrain.at(x / scale, y / scale));
                     if (f == 0) {
                         f = current_height;
@@ -264,7 +211,6 @@ void export_path_img(image<float>& result, image<float>& heights, const image<fl
 
 
 void reshape_hills_on_map(image<float>& map) {
-
     for (int i = 0; i < 1; i++) {
         map.for_each_pixel([](float& m) {
             if (m > 0.05 && m < 1.0) {
@@ -273,7 +219,6 @@ void reshape_hills_on_map(image<float>& map) {
         });
 
         scale_range(map);
-
     }
 
     std::vector<int> lut(256);
@@ -284,12 +229,6 @@ void reshape_hills_on_map(image<float>& map) {
         float m = 3.0 / 5.0;
         lut[64 + i] = 64 + m * i;
     }
-
-    //for (int i = 0; i < 32; i++) {
-    //    float m = 3.0;
-    //    lut[7 * 32 + i] = 5 * 32 + m * i;
-    //}
-
 
     map.for_each_pixel([&](float& m) {
         m = std::min(1.0F, std::max(m, 0.0F));
@@ -304,6 +243,10 @@ void reshape_hills_on_map(image<float>& map) {
     });
     scale_range(map);
 
+    add_gaussian_blur(map);
+    add_gaussian_blur(map);
+    add_gaussian_blur(map);
+    add_gaussian_blur(map);
 }
 
 
@@ -399,229 +342,46 @@ std::pair<image<float>, image<float>> generate_rivers(const image<float>& map) {
     export_ppm("blub_hatch.ppm", hatches);
 
     return {rivers, heights};
-/*
-    for (int j = 0; j < 7; j++) {
-        for (int i = 0; i < 7; i++) {
-            if (auto rivers_region = rivers.subregion(2560 * i, 2560 * j, 2560, 2560)) {
-                auto map_region = map.subregion(2560 * i, 2560 * j, 2560, 2560);
-                auto hatch_region = hatches.subregion(2560 * i, 2560 * j, 2560, 2560);
-                rivers_region->for_each_pixel([](float& p) {
-                    if (p > 0.0) {
-                        p = -p;
-                    }
-                });
-                auto placed_rivers = add_rivers_on_map(*rivers_region, *hatch_region, *map_region, gen, 2560 * 2560 * 0.01);
-            }
-        }
-    }
-    rivers.for_each_pixel([](float& p) {
-        p = std::abs(p);
-    });
-    */
-/*
-    size_t num_placed_rivers = 0;
-    loading_bar.init("Generate rivers", 10000);
-    while (num_placed_rivers < 10000) {
-        int x = dis_width(gen);
-        int y = dis_height(gen);
-        int width = map.width() * 0.1 + dis_width(gen);
-        int height = map.height() * 0.1 + dis_height(gen);
-
-        if (width > 0 && height > 0) {
-            if (auto map_region = map.subregion(x, y, width, height)) {
-                if (auto rivers_region = rivers.subregion(x, y, width, height)) {
-                    auto hatch_region = hatches.subregion(x, y, width, height);
-                    float scale = 0.0001;
-                    size_t n = width * height * scale;
-                    auto [min, max] = map_region->range();
-
-                    if (min == 0 && max > 0) {
-                        rivers_region->for_each_pixel([](float& p) {
-                            p = -std::abs(p);
-                        });
-
-                        auto placed_rivers = add_rivers_on_map(*rivers_region, *hatch_region, *map_region, gen, n);
-                        num_placed_rivers += placed_rivers;
-                        loading_bar.multi_step(placed_rivers);
-                    }
-                }
-            }
-        }
-    }
-
-    rivers.for_each_pixel([](float& p) {
-        p = std::abs(p);
-    });
-    scale_range(rivers);
-
-    loading_bar.finalize();
-
-    return rivers;
-    */
 }
 
-std::pair<int, int> update_positions_on_map(const image<float>& map, const image<float>& rivers, const int x, const int y) {
-    auto current_x = x;
-    auto current_y = y;
+std::vector<int> generate_grayscale_histogram(const image<float>& img) {
+    std::vector<int> histogram(256);
 
-    float current_min = std::numeric_limits<float>::infinity();
+    img.for_each_pixel([&](auto& p) {
+        if (p < 1.0) {
+            histogram[p * 256]++;            
+        }
+    });
 
-    for (int dy = -1; dy < 2; dy++) {
-        auto dx = 0;
-        if (dx != dy && map.contains(current_x + dx, current_y + dy)) {
-            current_min = std::min(current_min, map.at(current_x + dx, current_y + dy) * 256 + rivers.at(current_x + dx, current_y + dy));
-            if (map.at(current_x + dx, current_y + dy) == 0) {
-                return {current_x + dx, current_y + dy};
-            }
-        }
-    }
-
-    for (int dx = -1; dx < 2; dx++) {
-        auto dy = 0;
-        if (dx != dy && map.contains(current_x + dx, current_y + dy)) {
-            current_min = std::min(current_min, map.at(current_x + dx, current_y + dy) * 256 + rivers.at(current_x + dx, current_y + dy));
-            if (map.at(current_x + dx, current_y + dy) == 0) {
-                return {current_x + dx, current_y + dy};
-            }
-        }
-    }
-    for (int dy = -1; dy < 2; dy++) {
-        auto dx = 0;
-        if (dx != dy && map.contains(current_x + dx, current_y + dy)) {
-            auto val = map.at(current_x + dx, current_y + dy) * 256 + rivers.at(current_x + dx, current_y + dy);
-            if (current_min == val) {
-                return {current_x + dx, current_y + dy};
-            }
-        }
-    }
-    for (int dx = -1; dx < 2; dx++) {
-        auto dy = 0;
-        if (dx != dy && map.contains(current_x + dx, current_y + dy)) {
-            auto val = map.at(current_x + dx, current_y + dy) * 256 + rivers.at(current_x + dx, current_y + dy);
-            if (current_min == val) {
-                return {current_x + dx, current_y + dy};
-            }
-        }
-    }
-
-    return {current_x, current_y};
+    return histogram;
 }
 
-image<float> generate_rivers2(const image<float>& map) {
-    image<float> result(map.width(), map.height());
-    image<float> log(map.width(), map.height());
-    image<float> rain(map.width(), map.height());
+void apply_relative_threshold(image<float>& img, const float factor) {
+    int threshold = 255;
+    int sum = 0;
 
-    auto copy = map;
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> dis_width(0, map.width() - 1);
-    std::uniform_int_distribution<int> dis_height(0, map.height() - 1);
-    std::uniform_int_distribution<int> dis_noice(0, 10);
+    std::vector<int> histogram = generate_grayscale_histogram(img);
 
-
-    rain.for_each_pixel([&](float& p) {
-        if (dis_noice(gen) == 9) {
-            p = 0.1;
-        }
-    });
-    copy.for_each_pixel([&](float& p) {
-        if (p > 0) {
-            //p = p + (0.01 + dis_noice(gen) * 0.009) * 0.5;
-        }
-    });
-
-    for (int i = 0; i < 1000; i++) {
-        log.for_each_pixel([&](float& p, auto x, auto y) {
-            p += 1.0;
-        });
-        image<float> newLog(map.width(), map.height());
-        log.for_each_pixel([&](float& p, auto x, auto y) {
-            if (map.at(x, y) > 0) {
-                auto [next_x, next_y] = update_positions_on_map(copy, log, x, y);
-
-                auto v = p;
-                p = 0;
-                if (map.at(next_x, next_y) > 0) {
-                    newLog.at(next_x, next_y) += v;
-                }
-            }
-        });
-        log = newLog;
-
-        result.for_each_pixel([&](float& p, auto x, auto y) {
-            p = std::max(p, log.at(x, y));
-        });
+    while (img.width() * img.height() * factor > sum && threshold >= 0) {
+        sum += histogram[threshold];
+        threshold--;
     }
 
-
-    return log;
-
-
-/*
-    image<float> result(map.width(), map.height());
-    auto copy = map;
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> dis_width(0, map.width() - 1);
-    std::uniform_int_distribution<int> dis_height(0, map.height() - 1);
-    std::uniform_int_distribution<int> dis_noice(0, 10);
-
-
-    copy.for_each_pixel([&](float& p) {
-        if (p > 0) {
-            p = p + 0.01 + dis_noice(gen) * 0.009;
+    img.for_each_pixel([&](auto& p) {
+        if (p * 256 < threshold) {
+            p = 0;
         }
     });
-    
-    for (int i = 0; i < 1; i++) {
-        int current_x, current_y;
-
-        do {
-            current_x = dis_width(gen);
-            current_y = dis_height(gen);
-        } while (copy.at(current_x, current_y) == 0 && result.at(current_x, current_y) == 0);
-
-        image<float> new_river(map.width(), map.height());
-        while (copy.at(current_x, current_y) > 0) {
-            new_river.at(current_x, current_y)++;
-
-            auto [next_x, next_y] = update_positions_on_map(copy, new_river, current_x, current_y);
-
-            copy.at(next_x, next_y) = std::min(copy.at(next_x, next_y), copy.at(current_x, current_y));
-
-            current_x = next_x;
-            current_y = next_y;
-        }
-
-        result.for_each_pixel([&](auto& f, auto x, auto y) {
-            f += new_river.at(x, y);
-        });
-    }
-    
-    scale_range(result);
-
-    return result;
-    */
 }
 
-
-
-int main() {
-    int width = 512;
-    int height = 512;
-    auto base_map = generate_unfaded_terrain(width, height);
-
-    export_ppm("blab.ppm", base_map);
-
-    base_map.for_each_pixel([&](auto& p, auto x, auto y) {
-        auto dx = std::abs(static_cast<int>(x) - width / 2);
-        auto dy = std::abs(static_cast<int>(y) - height / 2);
+void apply_circular_fade_out(image<float>& img, const float factor) {
+    img.for_each_pixel([&](auto& p, auto x, auto y) {
+        auto dx = std::abs(static_cast<int>(x) - static_cast<int>(img.width()) / 2);
+        auto dy = std::abs(static_cast<int>(y) - static_cast<int>(img.height()) / 2);
         auto distance = std::sqrt(dx * dx + dy * dy);
 
-        auto start = std::min(width, height) * 0.4;
-        auto end = std::min(width, height);
+        auto start = std::min(img.width(), img.height()) * factor;
+        auto end = std::min(img.width(), img.height());
         auto border = end - start;
 
         if (distance > start) {
@@ -629,202 +389,87 @@ int main() {
             p *= scale;            
         }
     });
+}
 
-    std::vector<int> histogram(256);
+image<float> add_noise_with_terrains(const image<float>& map, const int width, const int height, const int scale) {
+    auto result = generate_multi_terrain(width, height, 2 * scale, 2 * scale);
+    auto copy = map;
 
-    base_map.for_each_pixel([&](auto& p) {
-        if (p < 1.0) {
-            histogram[p * 256]++;            
+    add_gaussian_blur(copy);
+    add_gaussian_blur(copy);
+    scale_range(copy);
+
+    result.for_each_pixel([&](auto& p, auto x, auto y) {
+        if (copy.contains(x, y)) {
+            auto s = copy.at(x, y);
+
+            if (s > 0) {
+                p = (s + s * p) / 2;
+            } else {
+                p = 0;
+            }
         }
     });
-    int threshold = 255;
-    int sum = 0;
-    float factor = 0.3;
-    while (width * height * factor > sum && threshold >= 0) {
-        sum += histogram[threshold];
-        threshold--;
+
+    if (auto sub = result.subregion(0, 0, result.width() / 2, result.height() / 2)) {
+        result = *sub;
     }
 
+    scale_range(result);
 
-    base_map.for_each_pixel([&](auto& p) {
-        if (p * 256 < threshold) {
-            p = 0;
-        }
-    });
+    return result;
+}
 
-
-    reshape_hills_on_map(base_map);
-    add_gaussian_blur(base_map);
-    add_gaussian_blur(base_map);
-    add_gaussian_blur(base_map);
-    add_gaussian_blur(base_map);
-
-    int scale = 20;
-
-    auto larger_map = base_map.rescale(scale * width, scale * height);
-    export_ppm("blub.ppm", base_map);
-    export_ppm("bluub.ppm", larger_map);
-
-
-        auto result = generate_multi_terrain(width, height, 2 * scale, 2 * scale);
-        export_ppm("full.ppm", result);
-
-        add_gaussian_blur(larger_map);
-        add_gaussian_blur(larger_map);
-        scale_range(larger_map);
-
-        result.for_each_pixel([&](auto& p, auto x, auto y) {
-            if (larger_map.contains(x, y)) {
-                auto s = larger_map.at(x, y);
-
-                if (s > 0) {
-                    p = (s + s * p) / 2;
-                } else {
-                    p = 0;
-                }
-            }
-        });
-
-        if (auto sub = result.subregion(0, 0, result.width() / 2, result.height() / 2)) {
-            result = *sub;
-        }
-
-        //result.for_each_pixel([](auto& p) {
-        //    if (p < 0.3) {
-        //        p = 0;
-        //    } else {
-        //        p = (p - 0.3) * 0.9 + 0.1;
-        //    }
-        //});
-        //scale_range(result);
-
-
-        scale_range(result);
-
-        //export_ppm("path.ppm", generate_rivers2(result));
-
-
-        export_ppm("full2.ppm", result);
-
-/*
-    image<std::pair<char, char>> pos_map(scale * width, scale * height);
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> dis_width(0, scale);
-
-    pos_map.for_each_pixel([&](auto& f) {
-        auto& [x, y] = f;
-        x = dis_width(gen);
-        y = dis_width(gen);
-    });
-    */
-
-    //export_ppm("path.ppm", rivers);
-    //rivers.for_each_pixel([&](auto f, auto x, auto y) {
-    //    if (x > 0 && y > 0 && x < rivers.width() - 1 && y < rivers.height() - 1 && f > 0) {
-    //        if (rivers.at(x + 1, y + 1) > 0) {
-    //            rivers.at(x, y + 1) = rivers.at(x, y);
-    //        }
-    //    }
-    //});
-    //rivers.for_each_pixel([&](auto f, auto x, auto y) {
-    //    if (x > 0 && y > 0 && x < rivers.width() - 1 && y < rivers.height() - 1 && f > 0) {
-    //        if (rivers.at(x + 1, y - 1) > 0) {
-    //            rivers.at(x, y - 1) = rivers.at(x, y);
-    //        }
-    //    }
-    //});
-    //export_ppm("path3.ppm", rivers);
-    //return 0;
-
-    //rivers.for_each_pixel([&](auto f, auto x, auto y) {
-    //    if (x > 0 && y > 0 && x < rivers.width() - 1 && y < rivers.height() - 1 && f > 0) {
-    //        auto [dx, dy] = pos_map.at(x, y);
-    //        larger_river.at(scale * x + dx, scale * y + dy) = f;
-
-    //        if (rivers.at(x, y + 1) > 0) {
-    //            auto t = rivers.at(x, y + 1);
-    //            auto [edx, edy] = pos_map.at(x, y + 1);
-
-    //            draw_line(larger_river, scale * x + dx, scale * y + dy, scale * (x) + edx, scale * (y + 1) + edy, std::min(t, f));
-    //        }
-
-    //        if (rivers.at(x + 1, y) > 0) {
-    //            auto t = rivers.at(x + 1, y);
-    //            auto [edx, edy] = pos_map.at(x + 1, y);
-
-    //            draw_line(larger_river, scale * x + dx, scale * y + dy, scale * (x + 1) + edx, scale * y + edy, std::min(t, f));
-    //        }
-    //    }
-    //});
+void apply_relative_noise(image<float>& img, const float factor) {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<int> dis_noice(0, 10);
 
-    result.for_each_pixel([&](float& p) {
+    img.for_each_pixel([&](float& p) {
         if (p > 0) {
-            p = p + p * (dis_noice(gen) * 0.01);
+            p = p + p * (dis_noice(gen) * factor);
         }
     });
 
-    scale_range(result);
+    scale_range(img);
+}
 
-    auto rescaled_result = result.rescale(width, height);
-    export_ppm("rescaled.ppm", rescaled_result);
-
-    auto [rivers, river_heights] = generate_rivers(rescaled_result);
-    export_ppm("heights.ppm", river_heights);
-
-    export_ppm("path2.ppm", rivers);
-
-
-    image<float> final_river(scale * width, scale * height);
-    
-    {
-    image<float> scaleCircle(512, 512);
-    scaleCircle.for_each_pixel([&](auto& f, auto x, auto y) {
-        auto dx = std::abs(static_cast<int>(x) - 256);
-        auto dy = std::abs(static_cast<int>(y) - 256);
-        auto distance = std::sqrt(dx * dx + dy * dy);
-
-        if (distance > 256) {
-            f = 1.0f;
-        } else if (distance < 128) {
-            f = 0.0f;
-        } else {
-            f = (distance - 128.0f) / 128.0f;
-        }
-    });
-
-    image<float> circle(256, 256);
+std::vector<image<float>> generate_circle_stack(const int n) {
+    image<float> circle(n, n);
     circle.for_each_pixel([&](auto& f, auto x, auto y) {
-        auto dx = std::abs(static_cast<int>(x) - 128);
-        auto dy = std::abs(static_cast<int>(y) - 128);
+        auto dx = std::abs(static_cast<int>(x) - (n / 2));
+        auto dy = std::abs(static_cast<int>(y) - (n / 2));
         auto distance = std::sqrt(dx * dx + dy * dy);
 
-        if (distance > 128) {
+        if (distance > (n / 2)) {
             f = 0;
         } else {
             f = 1.0;
         }
     });
-    std::vector<image<float>> circles;
-    std::vector<image<float>> scaleCircles;
 
-    for (int i = 0; i < 255; i++) {
+    std::vector<image<float>> circles;
+
+    for (int i = 0; i < (n - 1); i++) {
         circles.push_back(circle.rescale(i + 1, i + 1));
-        scaleCircles.push_back(scaleCircle.rescale((i + 1) * 2, (i + 1) * 2));
     }
 
-    rivers.for_each_pixel([&](auto& f, auto x, auto y) {
+    return circles;
+}
+
+image<float> add_circular_trace(const image<float>& map, const image<float>& color) {
+    image<float> result(map.width(), map.height());
+    
+    auto circles = generate_circle_stack(256);
+
+    map.for_each_pixel([&](auto f, auto x, auto y) {
         if (f > 0) {
             auto val = std::min(255.0F, f * 256) / 2;
             auto src = circles[val];
             src.for_each_pixel([&](auto& f) {
-                f *= river_heights.at(x, y);
+                f *= color.at(x, y);
             });
-            if (auto dest = final_river.subregion(x - src.width() / 2, y - src.height() / 2, src.width(), src.height())) {
+            if (auto dest = result.subregion(x - src.width() / 2, y - src.height() / 2, src.width(), src.height())) {
                 dest->for_each_pixel([&](auto& f, auto x, auto y) {
                     if (src.at(x, y) > 0) {
                         if (f == 0) {
@@ -838,72 +483,13 @@ int main() {
         }
     });
 
+    return result;
+}
 
-
-    //int found = 0;
-    //int pos;
-    //float found_col;
-
-    //final_river.for_each_pixel([&](auto& f, auto x, auto y) {
-    //    if (larger_map.at(x, y) == 0 || x == 0) {
-    //        found = 0;
-    //        return;
-    //    }
-    //    
-    //    switch (found) {
-    //        case 0 : {
-    //            if (f > 0) {
-    //                pos = x;
-    //                found_col = f;
-    //                found++;
-    //            }
-
-    //            break;
-    //        }
-    //        case 1 : {
-    //            if (f > 0) {
-    //                pos = x;
-    //                found_col = f;
-    //            } else {
-    //                found++;
-    //            }
-
-    //            break;
-    //        }
-    //        case 2 : {
-    //            if (f > 0) {
-    //                for (int i = pos + 1; i < x; i++) {
-    //                    auto distance = x - pos;
-    //                    auto delta = f - found_col;
-    //                    auto rel = i - pos + 1;
-
-    //                    auto s = found_col + (delta / distance) * rel;
-
-    //                    final_river.at(i, y) = s;
-    //                }
-    //                found = 1;
-    //                pos = x;
-    //                found_col = f;
-    //            }
-
-    //            break;
-    //        }
-    //        default: break;
-    //    }
-
-    //});
-
-
-
-    }
-
-    image<float> scale_map(scale * width, scale * height, 1.0);
-    image<float> river_map(scale * width, scale * height, 1.0);
-
-    int thisSize = 128;
-    image<float> circle(thisSize, thisSize);
+image<float> generate_scale_circle(const int n) {
+    image<float> circle(n, n);
     circle.for_each_pixel([&](auto& f, auto x, auto y) {
-        auto half = thisSize / 2;
+        auto half = n / 2;
         auto dx = std::abs(static_cast<int>(x) - half);
         auto dy = std::abs(static_cast<int>(y) - half);
         auto distance = std::sqrt(dx * dx + dy * dy);
@@ -920,17 +506,27 @@ int main() {
         auto m = s * s;
         f = 1.0f - m;
     });
+    circle.for_each_pixel([&](auto& f) {
+        auto s = 1.0f - f;
+        auto m = s * s;
+        f = 1.0f - m;
+    });
 
-    result.for_each_pixel([&](auto&, int x, int y) {
-        if (!final_river.contains(x, y) || !scale_map.contains(x, y) || !river_map.contains(x, y)) {
+    return circle;
+}
+
+void apply_mask_on_terrain(image<float>& map, const image<float>& mask) {
+    image<float> scale_map(map.width(), map.height(), 1.0);
+    image<float> baseline(map.width(), map.height(), 1.0);
+
+    auto circle = generate_scale_circle(64);
+
+    map.for_each_pixel([&](auto&, int x, int y) {
+        if (!mask.contains(x, y) || !scale_map.contains(x, y) || !baseline.contains(x, y)) {
             return;
         }
 
-        auto r = final_river.at(x, y);
-
-        if ((y % 1000) == 0 && x == 0) {
-            std::cout << y << std::endl;
-        }
+        auto r = mask.at(x, y);
 
         if (r > 0) {
             circle.for_each_pixel([&](auto f, auto cx, auto cy) {
@@ -938,54 +534,49 @@ int main() {
                 auto dest_y = y - circle.height() / 2 + cy;
 
                 if (scale_map.contains(dest_x, dest_y)) {
-                    float old = scale_map.at(dest_x, dest_y);
-                    float next = f;
-                    scale_map.at(dest_x, dest_y) = std::min(old, next);
+                    scale_map.at(dest_x, dest_y) = std::min(scale_map.at(dest_x, dest_y), f);
                 }
-                if (river_map.contains(dest_x, dest_y)) {
+                if (baseline.contains(dest_x, dest_y)) {
                     if (f < 1.0) {
-                        float old = river_map.at(dest_x, dest_y);
-                        float next = r;//(1.0 - r) * f + r;
-                        river_map.at(dest_x, dest_y) = std::min(old, next);
+                        baseline.at(dest_x, dest_y) = std::min(baseline.at(dest_x, dest_y), r);
                     }
                 }
             });
         }
     });
-    result.for_each_pixel([&](auto& f, int x, int y) {
-        if (!river_map.contains(x, y)) {
+    map.for_each_pixel([&](auto& f, int x, int y) {
+        if (!baseline.contains(x, y)) {
             return;
         }
-        f = f * scale_map.at(x, y) +  river_map.at(x, y) * (1.0f - scale_map.at(x, y));
-        //float old = f;
-        //float next = river_map.at(x, y);
-
-        //f = std::min(old, next);
-
-        //float r = river_map.at(x, y);
-        //float rev = 1.0f - f;
-
-        //float d = rev * scale_map.at(x, y);
-
-        //f = r - d;
-
-
-        //f = f * scale_map.at(x, y) + (1.0f - scale_map.at(x, y));
-
-
-
-
-
+        f = f * scale_map.at(x, y) + baseline.at(x, y) * (1.0f - scale_map.at(x, y));
     });
+}
 
-    final_river.for_each_pixel([&](auto& f, auto x, auto y) {
-        if (f > 0 && result.contains(x, y)) {
-            result.at(x, y) = std::min(f, result.at(x, y));
-        }
-    });
-    export_ppm("final_river.ppm", final_river);
+int main() {
+    int width = 512;
+    int height = 512;
+    auto base_map = generate_unfaded_terrain(width, height);
+
+    apply_circular_fade_out(base_map, 0.4);
+    apply_relative_threshold(base_map, 0.3);
+
+    reshape_hills_on_map(base_map);
+
+    int scale = 20;
+
+    auto larger_map = base_map.rescale(scale * width, scale * height);
+
+    auto result = add_noise_with_terrains(larger_map, width, height, scale);
+
+    apply_relative_noise(result, 0.01);
+
+    auto rescaled_result = result.rescale(width, height);
+    auto [rivers, river_heights] = generate_rivers(rescaled_result);
+
+    auto final_river = add_circular_trace(rivers, river_heights);
+    apply_mask_on_terrain(result, final_river);
+
     export_ppm("final_map.ppm", result);
-
 
     return 0;
 }

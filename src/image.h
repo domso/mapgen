@@ -222,6 +222,46 @@ public:
 
         return result;
     }
+
+    template<typename exec_T>
+        requires caller_accepts_arguments<exec_T, T>
+    void draw_line(const int start_x, const int start_y, const int end_x, const int end_y, const exec_T& call) {
+        draw_line(start_x, start_y, end_x, end_y, [&call](auto& f, auto x, auto y) {
+            call(f);
+        });
+    }
+    template<typename exec_T>
+        requires caller_accepts_arguments<exec_T, T, size_t, size_t>
+    void draw_line(const int start_x, const int start_y, const int end_x, const int end_y, const exec_T& call) {
+        int dx = std::abs(end_x - start_x);
+        int dy = std::abs(end_y - start_y);
+
+        int sx = (start_x < end_x) ? 1 : -1;
+        int sy = (start_y < end_y) ? 1 : -1;
+
+        int err = dx - dy;
+
+        int x = start_x;
+        int y = start_y;
+
+        while (true) {
+            call(this->at(x, y), x, y);
+
+            if (x == end_x && y == end_y) {
+                break;
+            }
+
+            int e2 = 2 * err;
+            if (e2 > -dy) {
+                err -= dy;
+                x += sx;
+            }
+            if (e2 < dx) {
+                err += dx;
+                y += sy;
+            }
+        }
+    }
 private:
     image() {}
     size_t m_width;
