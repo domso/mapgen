@@ -23,3 +23,10 @@ image<float> extract_non_zero_region(const image<float>& img);
 
 image<float> extract_background(const image<float>& img, const float threshold);
 
+std::vector<int> generate_grayscale_histogram(const image<float>& img);
+
+void apply_relative_threshold(image<float>& img, const float factor);
+
+void apply_circular_fade_out(image<float>& img, const float factor);
+
+void apply_relative_noise(image<float>& img, const float factor);

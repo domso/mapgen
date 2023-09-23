@@ -8,12 +8,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FALGS} -O3 -std=c++20 -pthread")
 add_executable(mapgen 
     src/helper.cpp 
     src/generate_terrain.cpp 
-    src/generate_mask.cpp 
-    src/generate_tiles.cpp 
-    src/generate_placement.cpp 
     src/generate_multi_terrain.cpp 
-    src/generate_water.cpp 
-    src/merge_map.cpp 
+    src/generate_rivers.cpp
+    src/generate_world.cpp
     src/terrain_buffer.cpp
     src/main.cpp 
 )

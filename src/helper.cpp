@@ -149,3 +149,65 @@ image<float> extract_background(const image<float>& img, const float threshold) 
 
     return extract_non_zero_region(base_background);
 }
+
+std::vector<int> generate_grayscale_histogram(const image<float>& img) {
+    std::vector<int> histogram(256);
+
+    img.for_each_pixel([&](auto& p) {
+        if (p < 1.0) {
+            histogram[p * 256]++;            
+        }
+    });
+
+    return histogram;
+}
+
+void apply_relative_threshold(image<float>& img, const float factor) {
+    int threshold = 255;
+    int sum = 0;
+
+    std::vector<int> histogram = generate_grayscale_histogram(img);
+
+    while (img.width() * img.height() * factor > sum && threshold >= 0) {
+        sum += histogram[threshold];
+        threshold--;
+    }
+
+    img.for_each_pixel([&](auto& p) {
+        if (p * 256 < threshold) {
+            p = 0;
+        }
+    });
+}
+
+void apply_circular_fade_out(image<float>& img, const float factor) {
+    img.for_each_pixel([&](auto& p, auto x, auto y) {
+        auto dx = std::abs(static_cast<int>(x) - static_cast<int>(img.width()) / 2);
+        auto dy = std::abs(static_cast<int>(y) - static_cast<int>(img.height()) / 2);
+        auto distance = std::sqrt(dx * dx + dy * dy);
+
+        auto start = std::min(img.width(), img.height()) * factor;
+        auto end = std::min(img.width(), img.height());
+        auto border = end - start;
+
+        if (distance > start) {
+            auto scale = 1.0 - (distance - start) / border;
+            p *= scale;            
+        }
+    });
+}
+
+void apply_relative_noise(image<float>& img, const float factor) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> dis_noice(0, 10);
+
+    img.for_each_pixel([&](float& p) {
+        if (p > 0) {
+            p = p + p * (dis_noice(gen) * factor);
+        }
+    });
+
+    scale_range(img);
+}
+
