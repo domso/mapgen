@@ -202,6 +202,12 @@ std::pair<image<std::pair<float, int>>, image<float>> generate_path_to_random_po
             p = p + (0.01 + dis_noice(gen) * 0.009) * 1;
         }
     });
+
+    add_gaussian_blur(copy);
+    add_gaussian_blur(copy);
+    add_gaussian_blur(copy);
+    add_gaussian_blur(copy);
+
     auto path = generate_path(copy, dx, dy);
 
     return {path, copy};

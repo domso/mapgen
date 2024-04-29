@@ -9,6 +9,7 @@
 class terrain_buffer {
 public:
     terrain_buffer(const int width, const int height, const int count);
+    ~terrain_buffer();
     image<float> pop();
     void stop();
 private:
@@ -16,9 +17,9 @@ private:
 
     int m_width;
     int m_height;
-    int m_count;
+    std::atomic<int> m_count;
 
     std::mutex m_mutex;
-    int m_current_num_threads = 0;
+    std::atomic<int> m_current_num_threads = 0;
     std::vector<image<float>> m_buffer;
 };

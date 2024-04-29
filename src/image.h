@@ -66,6 +66,18 @@ public:
     bool contains(const int x, const int y, const int width, const int height) const {
         return 0 <= x && x < m_width && 0 <= y && y < m_height && 0 <= x + width && x + width <= m_width && 0 <= y + height && y + height <= m_height;
     }
+    std::optional<T*> get(const int x, const int y) {
+        if (contains(x, y)) {
+            return &at(x, y);
+        }
+        return std::nullopt;
+    }
+    std::optional<const T*> get(const int x, const int y) const {
+        if (contains(x, y)) {
+            return &at(x, y);
+        }
+        return std::nullopt;
+    }
     const T& at(const int x, const int y) const {
         size_t ptr = m_offset + y * m_row_stride + x;
         return m_direct_data[ptr];
@@ -211,13 +223,38 @@ public:
         result.for_each_pixel([&](auto& p, auto x, auto y) {
             auto scale_x = static_cast<float>(x) / new_width;
             auto scale_y = static_cast<float>(y) / new_height;
-            
+
             size_t ref_x = scale_x * m_width;
             size_t ref_y = scale_y * m_height;
+
+            T right;
+            T bot;
+            T botright;
 
             if (this->contains(ref_x, ref_y)) {
                 p = this->at(ref_x, ref_y);
             }
+            right = p;
+            bot = p;
+            botright = p;
+            if (this->contains(ref_x + 1, ref_y)) {
+                right = this->at(ref_x + 1, ref_y);
+            }
+            if (this->contains(ref_x, ref_y + 1)) {
+                bot = this->at(ref_x, ref_y + 1);
+            }
+            if (this->contains(ref_x + 1, ref_y + 1)) {
+                botright = this->at(ref_x + 1, ref_y + 1);
+            }
+
+            float frac_x = (scale_x * static_cast<float>(m_width)) - ref_x;
+            float frac_y = (scale_y * static_cast<float>(m_height)) - ref_y;
+
+            p = p + (right - p) * frac_x;
+            auto lower_p = bot + (botright - bot) * frac_x;
+
+            p = p + (lower_p - p) * frac_y;
+
         });
 
         return result;

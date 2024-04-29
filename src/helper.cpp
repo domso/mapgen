@@ -154,8 +154,8 @@ std::vector<int> generate_grayscale_histogram(const image<float>& img) {
     std::vector<int> histogram(256);
 
     img.for_each_pixel([&](auto& p) {
-        if (p < 1.0) {
-            histogram[p * 256]++;            
+        if (p <= 1.0) {
+            histogram[p * 255]++;            
         }
     });
 

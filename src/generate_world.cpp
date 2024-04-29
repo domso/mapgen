@@ -46,6 +46,7 @@ void reshape_hills_on_map(image<float>& map) {
 
 image<float> add_noise_with_terrains(const image<float>& map, const int width, const int height, const int scale) {
     auto result = generate_multi_terrain(width, height, 2 * scale, 2 * scale);
+
     auto copy = map;
 
     add_gaussian_blur(copy);
@@ -191,18 +192,190 @@ void apply_mask_on_terrain(image<float>& map, const image<float>& mask) {
     });
 }
 
+image<float> random_pattern_tile(const std::vector<image<float>>& terrains, std::mt19937& gen, const int width, const int height) {
+    std::uniform_int_distribution<int> dis_terrain(0, terrains.size() - 1);
+
+    auto tile = terrains[dis_terrain(gen)];
+    std::uniform_real_distribution<float> dis(0.1, 0.7);
+
+    auto threshold = dis(gen);
+
+    if (threshold == 0) {
+        threshold = 0.1;
+    }
+    tile.for_each_pixel([&](float& m) {
+        if (m > threshold) {
+            //m = 1.0;
+        } else {
+            m = threshold;
+        }
+    });
+
+    scale_range(tile);
+
+    return tile;
+}
+image<float> generate_segment(const std::vector<image<float>>& terrains, const int width, const int height) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
+    image<float> map(width * 2, height * 2);
+    std::uniform_int_distribution<int> dis_width(0, width);
+    std::uniform_int_distribution<int> dis_height(0, height);
+    std::uniform_real_distribution<float> dis(0, 1.0);
+
+    for (int i = 0; i < 128; i++) {
+        auto tile = random_pattern_tile(terrains, gen, width, height);
+        auto b = dis(gen);
+        auto x = dis_width(gen);
+        auto y = dis_height(gen);
+
+        if (auto subregion = map.subregion(x, y, width, height)) {
+            subregion->for_each_pixel([&](auto& c, auto x, auto y) {
+                //c = std::max(c, b * tile.at(x, y));
+                c += std::max(0.0f, b * tile.at(x, y));
+            });
+        }
+    }
+    scale_range(map);
+    return map;
+}
+
+#include <thread>
+#include <mutex>
+#include <iostream>
 image<float> generate_base_world(const int width, const int height, const int scale, const float fade_factor, const float threshold, const float noise_factor) {
-    auto base_map = generate_unfaded_terrain(width, height);
+    std::random_device rd;
+    std::mt19937 gen(rd());
 
-    apply_circular_fade_out(base_map, fade_factor);
-    apply_relative_threshold(base_map, threshold);
-    reshape_hills_on_map(base_map);
+    image<float> map(width * 2 * scale, height * 2 * scale);
 
-    auto larger_map = base_map.rescale(scale * width, scale * height);
-    auto result = add_noise_with_terrains(larger_map, width, height, scale);
+    std::vector<image<float>> tiles;
+    std::vector<image<float>> terrains;
+    std::vector<std::thread> threads;
+    std::mutex mutex;
+
+    int target = 128; //scale * scale;
+    
+    for (int i = 0; i < std::min(8, target); i++) {
+        std::thread t1([&]() {
+            std::unique_lock ul(mutex);
+            while (true) {
+                if (terrains.size() > target) {
+                    return;
+                }
+                ul.unlock();
+                image<float> terrain = generate_terrain(width, height);
+                ul.lock();
+                terrains.push_back(std::move(terrain));
+                std::cout << terrains.size() << std::endl;
+            }
+        });
+
+        threads.push_back(std::move(t1));
+    }
+
+    for (auto& t : threads) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+
+    for (int i = 0; i < scale * scale; i++) {
+        tiles.push_back(generate_segment(terrains, width, height));
+    }
+
+    int i = 0;
+    for (int y = 0; y < scale; y++) {  
+        for (int x = 0; x < scale; x++) {            
+            image<float>& tile = tiles[i];
+            i++;
+            if (auto region = map.subregion(
+                x * tile.width() - 512 * x, 
+                y * tile.height() - 512 * y,
+                tile.width(),
+                tile.height()
+            )) {
+                (*region).add(tile);
+            }
+        }
+    }
+    scale_range(map);
+
+    if (auto result = map.subregion(0, 0, (scale + 1) * tile.width(), (scale + 1) * tile.height())) {
+        return *result;
+    }
+    return map;
+
+
+
+    //return random_pattern_tile(gen, width, height);
+
+    //auto map = generate_terrain(width, height);
+    auto base_map = map;
+    
+//    map.for_each_pixel([](float& m) {
+//        if (m < 0.20f) {
+//            m = 0.2;
+//        }
+//    });
+//    map.for_each_pixel([](float& m) {
+//        auto r = 1.0 - m;
+//        r = r * r;
+//        m = 1.0f - r;
+//    });
+//    map.for_each_pixel([](float& m) {
+//        m *= 0.5;
+//    });
+//    add_gaussian_blur(map);
+//
+//    //scale_range(map);
+//    return map;
+//
+//
+//    image<float> base_map(width * scale, height * scale);
+//    auto tmp = generate_multi_terrain(width, height, scale * 2, scale * 2);
+//    if (auto sub = tmp.subregion(0, 0, tmp.width() / 2, tmp.height() / 2)) {
+//        base_map = *sub;
+//    }
+//
+//    scale_range(base_map);
+//    for (int i = 0; i < 100; i++) {
+//        add_gaussian_blur(base_map);
+//    }
+//    add_erosion(gen, base_map);
+//    for (int i = 0; i < 200; i++) {
+//        add_gaussian_blur(base_map);
+//    }
+//    scale_range(base_map);
+//
+    auto larger_map = base_map.rescale(2 * scale * width, 2 * scale * height);
+
+    auto result = add_noise_with_terrains(larger_map, width, height, 2 * scale);
 
     apply_relative_noise(result, noise_factor);
 
+    scale_range(result);
+    for (int i = 0; i < 100; i++) {
+        add_gaussian_blur(result);
+    }
+    add_erosion(gen, result);
+    for (int i = 0; i < 20; i++) {
+        add_gaussian_blur(result);
+    }
+    scale_range(result);
+
+    result.for_each_pixel([&](auto& c) {
+        auto r = c;
+        auto s = r * r;
+        c = s;
+    });
+    scale_range(result);
+    result.for_each_pixel([&](auto& c, auto x, auto y) {
+        c = larger_map.at(x, y) + larger_map.at(x, y) * c;
+    });
+    scale_range(result);
+    
     return result;
 }
 

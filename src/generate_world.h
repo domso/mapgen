@@ -4,7 +4,7 @@
 
 void reshape_hills_on_map(image<float>& map);
 
-image<float> add_noise_with_terrains(const image<float>& map, const int width, const int height, const int scale);
+std::vector<image<float>> add_noise_with_terrains(const size_t n, const std::vector<image<float>>& maps, const int width, const int height, const int scale);
 
 std::vector<image<float>> generate_circle_stack(const int n);
 
