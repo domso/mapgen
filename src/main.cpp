@@ -209,6 +209,88 @@ void traverse_paths(image<float>& map, const image<std::pair<direction, float>>&
 
 }
 
+void draw_curly_split_line(image<float>& image, const float p, const int y, const int margin) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
+    std::uniform_real_distribution<float> dis(0, 1.0);
+
+    auto current_y = y - margin + dis(gen) * 2 *  margin;
+        if (current_y < 0) {
+            current_y = 0;
+        }
+        if (current_y > image.height() - 1) {
+            current_y = image.height() - 1;
+        }
+
+
+    for (int x = 0; x < image.width(); x++) {
+        image.at(x, current_y) = p;
+
+        auto delta = y - current_y;
+        auto relative_delta = static_cast<float>(std::abs(delta)) / margin;
+        relative_delta = 0.5;
+        auto r = dis(gen);
+
+        if (r < relative_delta) {
+            // move to base line
+            if (y < current_y) {
+                current_y--;
+            } else {
+                current_y++;
+            }
+        } else {
+            // move from base line
+            if (y < current_y) {
+                current_y++;
+            } else {
+                current_y--;
+            }
+        }
+        if (current_y < y - margin) {
+            current_y = y - margin;
+        }
+        if (current_y > y + margin) {
+            current_y = y + margin;
+        }
+
+        if (current_y < 0) {
+            current_y = 0;
+        }
+        if (current_y > image.height() - 1) {
+            current_y = image.height() - 1;
+        }
+    }
+}
+
+void fill_split_lines(image<float>& image, const float d) {
+    //image.for_each_pixel([&](auto& p, auto x, auto y) {
+    //    if (p == 0) {
+    //        if (y == 0) {
+    //            p = d;
+    //        } else {
+    //            p = image.at(x, y - 1);
+    //        }
+    //    }
+    //});
+    for (int x = 0; x < image.width(); x++) {
+        int start = 0;
+        for (int y = 0; y < image.height(); y++) {
+            if (image.at(x, y) != 0 || y == image.height() - 1) {
+                auto delta = image.at(x, y) - image.at(x, start);
+                if (y == image.height() - 1) {
+                    delta = 1.0f - image.at(x, start);
+                }
+                auto dy = delta / (y - start + 1);
+                for (int i = 0; i < y - start; i++) {
+                    image.at(x, start + i) = image.at(x, start) + i * dy; 
+                }
+                start = y;
+            }
+        }
+    }
+}
+
 
 int main() {
     int width = 512;
@@ -216,22 +298,142 @@ int main() {
     int scale = 10;
 
 
-    auto result = generate_base_world(width, height, scale, 0.1, 0.4, 0.1);
-    //auto result = *import_ppm<float>("final_map.ppm");
-    //    auto path_map = find_paths(result);
-    //    traverse_paths(result, path_map);
-    //    scale_range(result);
-    //export_ppm("final_map_with_rivers.ppm", result);
+    image<float> result(width, height);
+
+    draw_curly_split_line(result, 0.1, 64,  32);
+    draw_curly_split_line(result, 0.2, 128, 32);
+    draw_curly_split_line(result, 0.3, 192, 32);
+    draw_curly_split_line(result, 0.5, 256, 32);
+    draw_curly_split_line(result, 0.7, 320, 32);
+    draw_curly_split_line(result, 0.8, 384, 32);
+    draw_curly_split_line(result, 0.9, 448, 32);
+
+    fill_split_lines(result, 0);
+    add_gaussian_blur(result);
+    add_gaussian_blur(result);
+    add_gaussian_blur(result);
+    add_gaussian_blur(result);
+    add_gaussian_blur(result);
+    scale_range(result);
+
+    image<float> terrain = generate_terrain(width, height);
+
+    add_gaussian_blur(terrain);
+    add_gaussian_blur(terrain);
+
+    terrain.for_each_pixel([](auto& p) {
+        //p = p * p;
+        if (p < 0.30) {
+            p = 0;
+        } else {
+            p -= 0.30;
+        }
+    });
+
+    scale_range(terrain);
+    terrain.for_each_pixel([](auto& p) {
+        p = p * p;
+    });
+    int min_x = std::numeric_limits<int>::max();
+    int min_y = std::numeric_limits<int>::max();
+    int max_x = std::numeric_limits<int>::min();
+    int max_y = std::numeric_limits<int>::min();
+
+    terrain.for_each_pixel([&](auto& p, int x, int y) {
+        if (p > 0.01) {
+            min_x = std::min(min_x, x);
+            min_y = std::min(min_y, y);
+            max_x = std::max(max_x, x);
+            max_y = std::max(max_y, y);
+        }
+    });
+    terrain = *terrain.subregion(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1);
+    terrain = terrain.rescale(result.width(), result.height());
+    result.for_each_pixel([&](auto& p, auto x, auto y) {
+        //p = (p + terrain.at(x, y)) / 2.0;
+        p *= (1.0f - terrain.at(x, y));
+        if (terrain.at(x, y) == 0) {
+            p = 0;
+        }
+    });
+    scale_range(result);
 
 
-    ////apply_generated_rivers(width, height, result, scale);
-    //std::random_device rd;
-    //std::mt19937 gen(rd());
 
 
 
-    export_ppm("final_map.ppm", result);
+
+    export_ppm("region.ppm", result);
 
     return 0;
+
+
+//    //auto result = generate_base_world(width, height, scale, 0.1, 0.4, 0.1);
+//    image<float> terrain = generate_terrain(width, height);
+//    auto result = *import_ppm<float>("final_map.ppm");
+//    //terrain = terrain.rescale(result.width(), result.height());
+//
+//    add_gaussian_blur(terrain);
+//    add_gaussian_blur(terrain);
+//
+//    terrain.for_each_pixel([](auto& p) {
+//        //p = p * p;
+//        if (p < 0.30) {
+//            p = 0;
+//        } else {
+//            p -= 0.30;
+//        }
+//    });
+//
+//    scale_range(terrain);
+//    int min_x = std::numeric_limits<int>::max();
+//    int min_y = std::numeric_limits<int>::max();
+//    int max_x = std::numeric_limits<int>::min();
+//    int max_y = std::numeric_limits<int>::min();
+//
+//    terrain.for_each_pixel([&](auto& p, int x, int y) {
+//        if (p > 0) {
+//            min_x = std::min(min_x, x);
+//            min_y = std::min(min_y, y);
+//            max_x = std::max(max_x, x);
+//            max_y = std::max(max_y, y);
+//        }
+//    });
+//    terrain = *terrain.subregion(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1);
+//    terrain.for_each_pixel([](auto& p) {
+//        p = p * p;
+//    });
+//    terrain = terrain.rescale(result.width(), result.height());
+//
+//    result.for_each_pixel([&](auto& p, auto x, auto y) {
+//        if (terrain.contains(x, y)) {
+//            auto s = terrain.at(x, y);
+//
+//            if (s > 0) {
+//                p = (s + s * p) / 2;
+//            } else {
+//                p = 0;
+//            }
+//        }
+//    });
+//
+//    scale_range(result);
+//    export_ppm("what_is_this.ppm", result);
+//
+//    //    auto path_map = find_paths(result);
+//    //    traverse_paths(result, path_map);
+//    //    scale_range(result);
+//    //export_ppm("final_map_with_rivers.ppm", result);
+//
+//
+//    //apply_generated_rivers(width, height, result, scale);
+//    std::random_device rd;
+//    std::mt19937 gen(rd());
+//
+//
+//
+//    //export_ppm("final_map.ppm", result);
+//
+//    return 0;
 }
 

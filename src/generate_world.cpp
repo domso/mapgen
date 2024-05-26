@@ -255,7 +255,7 @@ image<float> generate_base_world(const int width, const int height, const int sc
     std::vector<std::thread> threads;
     std::mutex mutex;
 
-    int target = 128; //scale * scale;
+    int target = 512; //scale * scale;
     
     for (int i = 0; i < std::min(8, target); i++) {
         std::thread t1([&]() {
@@ -302,81 +302,10 @@ image<float> generate_base_world(const int width, const int height, const int sc
     }
     scale_range(map);
 
-    if (auto result = map.subregion(0, 0, (scale + 1) * tile.width(), (scale + 1) * tile.height())) {
+    if (auto result = map.subregion(0, 0, (scale + 1) * width, (scale + 1) * height)) {
         return *result;
     }
     return map;
-
-
-
-    //return random_pattern_tile(gen, width, height);
-
-    //auto map = generate_terrain(width, height);
-    auto base_map = map;
-    
-//    map.for_each_pixel([](float& m) {
-//        if (m < 0.20f) {
-//            m = 0.2;
-//        }
-//    });
-//    map.for_each_pixel([](float& m) {
-//        auto r = 1.0 - m;
-//        r = r * r;
-//        m = 1.0f - r;
-//    });
-//    map.for_each_pixel([](float& m) {
-//        m *= 0.5;
-//    });
-//    add_gaussian_blur(map);
-//
-//    //scale_range(map);
-//    return map;
-//
-//
-//    image<float> base_map(width * scale, height * scale);
-//    auto tmp = generate_multi_terrain(width, height, scale * 2, scale * 2);
-//    if (auto sub = tmp.subregion(0, 0, tmp.width() / 2, tmp.height() / 2)) {
-//        base_map = *sub;
-//    }
-//
-//    scale_range(base_map);
-//    for (int i = 0; i < 100; i++) {
-//        add_gaussian_blur(base_map);
-//    }
-//    add_erosion(gen, base_map);
-//    for (int i = 0; i < 200; i++) {
-//        add_gaussian_blur(base_map);
-//    }
-//    scale_range(base_map);
-//
-    auto larger_map = base_map.rescale(2 * scale * width, 2 * scale * height);
-
-    auto result = add_noise_with_terrains(larger_map, width, height, 2 * scale);
-
-    apply_relative_noise(result, noise_factor);
-
-    scale_range(result);
-    for (int i = 0; i < 100; i++) {
-        add_gaussian_blur(result);
-    }
-    add_erosion(gen, result);
-    for (int i = 0; i < 20; i++) {
-        add_gaussian_blur(result);
-    }
-    scale_range(result);
-
-    result.for_each_pixel([&](auto& c) {
-        auto r = c;
-        auto s = r * r;
-        c = s;
-    });
-    scale_range(result);
-    result.for_each_pixel([&](auto& c, auto x, auto y) {
-        c = larger_map.at(x, y) + larger_map.at(x, y) * c;
-    });
-    scale_range(result);
-    
-    return result;
 }
 
 void apply_generated_rivers(const int width, const int height, image<float>& map, const int scale) {
