@@ -60,6 +60,9 @@ public:
     size_t height() const {
         return m_height;
     }
+    size_t size() const {
+        return width() * height();
+    }
     bool contains(const int x, const int y) const {
         return 0 <= x && x < m_width && 0 <= y && y < m_height;
     }
@@ -168,6 +171,13 @@ public:
                 dest.at(x, y) = this->at(x, y);
             }
         }
+    }
+    image copy() const {
+        image result(width(), height());
+
+        copy_to(result);
+
+        return result;
     }
     void add(const image& src) {
         for (size_t y = 0; y < std::min(m_height, src.m_height); y++) {
@@ -298,6 +308,10 @@ public:
                 y += sy;
             }
         }
+    }
+    image<T> copy_shape() const {
+        image<T> result(width(), height());
+        return result;
     }
 private:
     image() {}

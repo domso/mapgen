@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "image.h"
+#include "voronoi.h"
 
 bool random_percentage(std::mt19937& gen, const int percent);
 
@@ -30,3 +31,12 @@ void apply_relative_threshold(image<float>& img, const float factor);
 void apply_circular_fade_out(image<float>& img, const float factor);
 
 void apply_relative_noise(image<float>& img, const float factor);
+
+image<float> mask_to_regions(const image<float>& image, const int regions);
+
+int random_integer(const int min, const int max);
+float random_float(const float min, const float bound);
+
+void quantify_image_pre_zero(image<float>& image, const int levels);
+
+std::pair<image<float>, image<float>> generate_river_level_and_height(const image<float>& rivers, const image<float>& weights, const std::vector<std::pair<size_t, size_t>>& river_endpoints);

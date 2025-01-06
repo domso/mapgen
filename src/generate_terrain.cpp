@@ -108,8 +108,8 @@ image<float> generate_unfaded_terrain(const int width, const int height) {
     for (int i = 0; i < config::terrain::num_hills; i++) {
         auto s = dis_size(gen);
         
-        generate_hill(gen, map, std::min(width - s, std::max(s, dis_width(gen))), std::min(height - s, std::max(s, dis_height(gen))), s, config::terrain::min_hill_height, config::terrain::max_hill_height);
-        //generate_hill(gen, map, dis_width(gen), dis_height(gen), s, config::terrain::min_hill_height, config::terrain::max_hill_height);
+        //generate_hill(gen, map, std::min(width - s, std::max(s, dis_width(gen))), std::min(height - s, std::max(s, dis_height(gen))), s, config::terrain::min_hill_height, config::terrain::max_hill_height);
+        generate_hill(gen, map, dis_width(gen), dis_height(gen), s, config::terrain::min_hill_height, config::terrain::max_hill_height);
     }
 
     scale_range(map);

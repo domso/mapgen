@@ -211,3 +211,142 @@ void apply_relative_noise(image<float>& img, const float factor) {
     scale_range(img);
 }
 
+image<float> mask_to_regions(const image<float>& image, const int regions) {
+    voronoi_generator v;
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> dis_x(0, image.width());
+    std::uniform_int_distribution<int> dis_y(0, image.height());
+
+    for (int i = 0; i < regions; i++) {
+        bool retry = true;
+        int n = 0;
+
+        while (retry && n < 1000000) {
+            auto x = dis_x(gen);
+            auto y = dis_y(gen);
+
+            if (!v.contains(x, y) && image.contains(x, y) && image.at(x, y) != 0) {
+                retry = false;
+                v.add(x, y);                
+            }
+            n++;
+        }
+    }
+    auto result = v.generate(image.width(), image.height());
+
+    result.for_each_pixel([&](auto& p, auto x, auto y) {
+        if (image.at(x, y) == 0) {
+            p = 0;
+        }
+    });
+
+    return result;
+}
+
+int random_integer(const int min, const int max) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> dis(min, max);
+    return dis(gen);
+}
+
+float random_float(const float min, const float bound) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<float> dis(min, bound);
+    return dis(gen);
+}
+
+void quantify_image_pre_zero(image<float>& image, const int levels) {
+    scale_range(image);
+
+    auto scale = 1.0f / levels;
+
+    image.for_each_pixel([&](auto& p) {
+        if (p == 0 || p == 1.0) {
+            return;
+        }
+        auto ratio = static_cast<int>(p / scale) + 1;
+        p = std::min(1.0f, ratio * scale);
+    });
+}
+
+std::pair<image<float>, image<float>> generate_river_level_and_height(const image<float>& rivers, const image<float>& weights, const std::vector<std::pair<size_t, size_t>>& river_endpoints) {
+    assert(rivers.size() == weights.size());
+
+    image<float> levels(rivers.width(), rivers.height());
+    image<float> heights(rivers.width(), rivers.height());
+
+    for (auto [start_x, start_y] : river_endpoints) {
+        std::queue<std::pair<int, int>> queue;
+        std::vector<std::pair<int, int>> history;
+        queue.push({start_x, start_y});
+        levels.at(start_x, start_y) = -1.0f;
+        history.push_back({start_x, start_y});
+
+        auto queue_update = [&](auto x, auto y) {
+            auto s = levels.get(x, y);
+            auto r = rivers.get(x, y);
+            if (s && r && **s == 0 && **r == rivers.at(start_x, start_y)) {
+                **s = -1.0f;
+                queue.push({x, y});
+                return true;
+            }
+            return false;
+        };
+
+        while (!queue.empty()) {
+            auto [current_x, current_y] = queue.front();
+            auto update = false;
+            update = queue_update(current_x + 1, current_y) || update;
+            update = queue_update(current_x - 1, current_y) || update;
+            update = queue_update(current_x, current_y + 1) || update;
+            update = queue_update(current_x, current_y - 1) || update;
+
+            if (update) {
+                history.push_back({current_x, current_y});
+            } else {
+                levels.at(current_x, current_y) = 1.0f;
+                heights.at(current_x, current_y) = weights.at(current_x, current_y);
+            }
+            
+            queue.pop();
+        }
+
+        auto level_update = [&](auto x, auto y) {
+            if (auto s = levels.get(x, y)) {
+                if (**s > 0) {
+                    return **s;
+                }
+            }
+            return 0.0f;
+        };
+
+        auto height_update = [&](auto x, auto y) {
+            if (auto s = levels.get(x, y)) {
+                if (**s > 0) {
+                    return weights.at(x, y);
+                }
+            }
+            return std::numeric_limits<float>::infinity();
+        };
+
+        for (auto it = history.rbegin(); it != history.rend(); it++) {
+            auto [current_x, current_y] = *it;
+            levels.at(current_x, current_y) = 
+                level_update(current_x + 1, current_y) +
+                level_update(current_x - 1, current_y) +
+                level_update(current_x, current_y + 1) +
+                level_update(current_x, current_y - 1);
+            heights.at(current_x, current_y) = std::min(std::min(std::min(std::min(
+                height_update(current_x, current_y), 
+                height_update(current_x + 1, current_y)), 
+                height_update(current_x - 1, current_y)),
+                height_update(current_x, current_y + 1)),
+                height_update(current_x, current_y - 1));
+        }
+    }
+
+    return {levels, heights};
+}
