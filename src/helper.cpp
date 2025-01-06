@@ -244,6 +244,39 @@ image<float> mask_to_regions(const image<float>& image, const int regions) {
     return result;
 }
 
+image<float> mask_to_border_regions(const image<float>& image, const int regions) {
+    voronoi_generator v;
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> dis_x(0, image.width());
+    std::uniform_int_distribution<int> dis_y(0, image.height());
+
+    for (int i = 0; i < regions; i++) {
+        bool retry = true;
+        int n = 0;
+
+        while (retry && n < 1000000) {
+            auto x = dis_x(gen);
+            auto y = dis_y(gen);
+
+            if (!v.contains(x, y) && image.contains(x, y) && image.at(x, y) == 0) {
+                retry = false;
+                v.add(x, y);                
+            }
+            n++;
+        }
+    }
+    auto result = v.generate(image.width(), image.height());
+
+    result.for_each_pixel([&](auto& p, auto x, auto y) {
+        if (image.at(x, y) == 0) {
+            p = 0;
+        }
+    });
+
+    return result;
+}
+
 int random_integer(const int min, const int max) {
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -349,4 +382,116 @@ std::pair<image<float>, image<float>> generate_river_level_and_height(const imag
     }
 
     return {levels, heights};
+}
+
+void invert_image(image<float>& img) {
+    img.for_each_pixel([](auto& p) {
+        p = 1.0f - p;
+    });
+}
+
+image<float> resize_and_center(const image<float>& img, const size_t width, const size_t height) {
+    image<float> result(width, height);
+
+    auto dx = width - img.width();
+    auto dy = height - img.height();
+
+    result.for_each_pixel([&](auto& p, auto x, auto y) {
+        auto sx = x - dx / 2;
+        auto sy = y - dy / 2;
+
+        if (auto s = img.get(sx, sy)) {
+            p = **s;
+        }
+    });
+
+    return result;
+}
+
+void draw_random_manhattan_line(image<float>& img, const int start_x, const int start_y, const int end_x, const int end_y, const float color) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<float> dis(0, 1.0);
+
+    int x = start_x;
+    int y = start_y;
+
+    // Calculate total distances to move
+    const int dx = std::abs(end_x - start_x);
+    const int dy = std::abs(end_y - start_y);
+
+    // Determine direction of movement
+    const int sx = (start_x < end_x) ? 1 : -1;
+    const int sy = (start_y < end_y) ? 1 : -1;
+
+    // Draw first pixel
+    if (img.contains(x, y)) {
+        img.at(x, y) = color;
+    }
+
+    // Keep track of error to decide whether to move horizontally or vertically
+    float error = 0.0f;
+    const float slope = (dx == 0) ? std::numeric_limits<float>::infinity() : static_cast<float>(dy) / static_cast<float>(dx);
+
+    while (x != end_x || y != end_y) {
+        if (x == end_x) {
+            // Only vertical movement remaining
+            y += sy;
+        }
+        else if (y == end_y) {
+            // Only horizontal movement remaining
+            x += sx;
+        }
+        else {
+            // Decide whether to move horizontally or vertically
+            const float error_if_horizontal = std::abs(slope - (static_cast<float>(std::abs(y - start_y)) / static_cast<float>(std::abs(x + sx - start_x))));
+            const float error_if_vertical = std::abs(slope - (static_cast<float>(std::abs(y + sy - start_y)) / static_cast<float>(std::abs(x - start_x))));
+
+            auto dice = dis(gen);
+            if (dice < 0.3) {
+                x += sx;
+            } else if (dice < 0.6) {
+                y += sy;
+            } else {
+                if (error_if_horizontal < error_if_vertical) {
+                    x += sx;
+                } else {
+                    y += sy;
+                }
+            }
+        }
+
+        if (img.contains(x, y)) {
+            img.at(x, y) = color;
+        }
+    }
+}
+
+void fade_borders(image<float>& map, const int range) {
+    for (int y = 0; y < map.height(); y++) {
+        for (int x = 0; x < range; x++) {
+            double scale = static_cast<double>(x) / static_cast<double>(range);
+            map.at(x, y) *= scale;
+        }
+    }
+    for (int y = 0; y < range; y++) {
+        for (int x = 0; x < map.width(); x++) {
+            double scale = static_cast<double>(y) / static_cast<double>(range);
+            map.at(x, y) *= scale;
+        }
+    }    
+    
+    for (int y = map.height() - range; y < map.height(); y++) {
+        for (int x = 0; x < map.width(); x++) {
+            double scale = static_cast<double>(map.height() - y) / static_cast<double>(range);
+            map.at(x, y) *= scale;
+        }
+    }    
+    
+    for (int y = 0; y < map.height(); y++) {
+        for (int x = map.width() - range; x < map.width(); x++) {
+            double scale = static_cast<double>(map.width() - x) / static_cast<double>(range);
+            map.at(x, y) *= scale;
+        }
+    }    
 }

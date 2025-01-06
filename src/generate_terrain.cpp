@@ -55,43 +55,7 @@ void add_erosion(std::mt19937& gen, image<float>& map) {
     map = copy;
 }
 
-void fade_borders(image<float>& map) {    
-    for (int y = 0; y < map.height(); y++) {
-        for (int x = 0; x < config::terrain::max_hill_size; x++) {
-            double scale = static_cast<double>(x) / static_cast<double>(config::terrain::max_hill_size);
-            map.at(x, y) *= scale;
-        }
-    }
-    for (int y = 0; y < config::terrain::max_hill_size; y++) {
-        for (int x = 0; x < map.width(); x++) {
-            double scale = static_cast<double>(y) / static_cast<double>(config::terrain::max_hill_size);
-            map.at(x, y) *= scale;
-        }
-    }    
-    
-    for (int y = map.height() - config::terrain::max_hill_size; y < map.height(); y++) {
-        for (int x = 0; x < map.width(); x++) {
-            double scale = static_cast<double>(map.height() - y) / static_cast<double>(config::terrain::max_hill_size);
-            map.at(x, y) *= scale;
-        }
-    }    
-    
-    for (int y = 0; y < map.height(); y++) {
-        for (int x = map.width() - config::terrain::max_hill_size; x < map.width(); x++) {
-            double scale = static_cast<double>(map.width() - x) / static_cast<double>(config::terrain::max_hill_size);
-            map.at(x, y) *= scale;
-        }
-    }    
-}
-
 image<float> generate_terrain(const int width, const int height) {
-    auto map = generate_unfaded_terrain(width, height);
-    fade_borders(map);
-    
-    return map;
-}
-
-image<float> generate_unfaded_terrain(const int width, const int height) {
     image<float> map(width, height);
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -99,7 +63,6 @@ image<float> generate_unfaded_terrain(const int width, const int height) {
     std::uniform_int_distribution<int> dis_width(0, width - 1);
     std::uniform_int_distribution<int> dis_height(0, height - 1);
     std::uniform_int_distribution<int> dis_size(config::terrain::min_hill_size, config::terrain::max_hill_size);
-
 
     map.for_each_pixel([&](float& p) {
         p = dis(gen);
@@ -123,6 +86,8 @@ image<float> generate_unfaded_terrain(const int width, const int height) {
         add_gaussian_blur(map);
     }
     scale_range(map);
+
+    fade_borders(map, config::terrain::max_hill_size);
     
     return map;
 }

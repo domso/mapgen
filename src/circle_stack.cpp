@@ -1,5 +1,7 @@
 #include "circle_stack.h"
 
+#include <cmath>
+
 image<float> circle_stack::at(const int n) {
     auto it = m_lookup.find(n);
 
@@ -8,7 +10,7 @@ image<float> circle_stack::at(const int n) {
     }
 
     auto circle = generate_scale_circle(n);
-    m_lookup.insert({p, circle});
+    m_lookup.insert({n, circle});
 
     return circle;
 }

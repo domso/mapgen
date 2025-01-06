@@ -8,11 +8,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FALGS} -O3 -g -std=c++20 -pthread")
 add_executable(mapgen 
     src/helper.cpp 
     src/generate_terrain.cpp 
-    src/generate_multi_terrain.cpp 
-    src/generate_rivers.cpp
-    src/generate_world.cpp
-    src/terrain_buffer.cpp
     src/main.cpp 
+
+    src/temperature_generator.cpp
+    src/moisture_generator.cpp
+    src/biome_generator.cpp
+    src/circle_stack.cpp
 )
 
 install(TARGETS mapgen RUNTIME DESTINATION bin)

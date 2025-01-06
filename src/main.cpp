@@ -5,8 +5,6 @@
 
 #include "export_ppm.h"
 #include "generate_terrain.h"
-#include "generate_multi_terrain.h"
-#include "generate_world.h"
 #include "circle_stack.h"
 #include "helper.h"
 
@@ -21,152 +19,6 @@
 
 #include "altitude_generator.h"
 #include "wetness_generator.h"
-
-void invert_image(image<float>& img) {
-    img.for_each_pixel([](auto& p) {
-        p = 1.0f - p;
-    });
-}
-
-image<float> center_reformat_image(const image<float>& img, const size_t width, const size_t height) {
-    image<float> result(width, height);
-
-    auto dx = width - img.width();
-    auto dy = height - img.height();
-
-    result.for_each_pixel([&](auto& p, auto x, auto y) {
-        auto sx = x - dx / 2;
-        auto sy = y - dy / 2;
-
-        if (auto s = img.get(sx, sy)) {
-            p = **s;
-        }
-    });
-
-    return result;
-}
-
-void draw_manhattan_line(image<float>& img, const int start_x, const int start_y, const int end_x, const int end_y, const float color) {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<float> dis(0, 1.0);
-
-    int x = start_x;
-    int y = start_y;
-
-    // Calculate total distances to move
-    const int dx = std::abs(end_x - start_x);
-    const int dy = std::abs(end_y - start_y);
-
-    // Determine direction of movement
-    const int sx = (start_x < end_x) ? 1 : -1;
-    const int sy = (start_y < end_y) ? 1 : -1;
-
-    // Draw first pixel
-    if (img.contains(x, y)) {
-        img.at(x, y) = color;
-    }
-
-    // Keep track of error to decide whether to move horizontally or vertically
-    float error = 0.0f;
-    const float slope = (dx == 0) ? std::numeric_limits<float>::infinity()
-                                 : static_cast<float>(dy) / static_cast<float>(dx);
-
-    while (x != end_x || y != end_y) {
-        if (x == end_x) {
-            // Only vertical movement remaining
-            y += sy;
-        }
-        else if (y == end_y) {
-            // Only horizontal movement remaining
-            x += sx;
-        }
-        else {
-            // Decide whether to move horizontally or vertically
-            const float error_if_horizontal = std::abs(slope - (static_cast<float>(std::abs(y - start_y)) /
-                                                              static_cast<float>(std::abs(x + sx - start_x))));
-            const float error_if_vertical = std::abs(slope - (static_cast<float>(std::abs(y + sy - start_y)) /
-                                                            static_cast<float>(std::abs(x - start_x))));
-
-            auto dice = dis(gen);
-            if (dice < 0.3) {
-                x += sx;
-            } else if (dice < 0.6) {
-                y += sy;
-            } else {
-                if (error_if_horizontal < error_if_vertical) {
-                    x += sx;
-                } else {
-                    y += sy;
-                }
-            }
-        }
-
-        if (img.contains(x, y)) {
-            img.at(x, y) = color;
-        }
-    }
-}
-
-void remove_redundant_line(image<float>& img) {
-    img.for_each_pixel([&](auto& p, auto x, auto y) {
-        auto N = (y > 0) ? img.at(x, y - 1) > 0.0f : false;
-        auto S = (y < img.height() - 1) ? img.at(x, y + 1) > 0.0f : false;
-        auto W = (x > 0) ? img.at(x - 1, y) > 0.0f : false;
-        auto E = (x < img.width() - 1) ? img.at(x + 1, y) > 0.0f : false;
-
-        auto NW = (x > 0 && y > 0) ? img.at(x - 1, y - 1) > 0.0f : false;
-        auto NE = (x < img.width() - 1 && y > 0) ? img.at(x + 1, y - 1) > 0.0f : false;
-        auto SW = (x > 0 && y < img.height() - 1) ? img.at(x - 1, y + 1) > 0.0f : false;
-        auto SE = (x < img.width() - 1 && y < img.height() - 1) ? img.at(x + 1, y + 1) > 0.0f : false;
-
-        int count = N + S + W + E + NW + NE + SW + SE;
-
-        auto required =
-            (N && W && !NW && count < 7) ||
-            (N && E && !NE && count < 7) ||
-            (N && S && (!NW || !W || !SW) && (!NE || !E || !SE)) ||
-            (E && W && (!NW || !N || !NE) && (!SW || !S || !SE)) ||
-            (S && E && !SE && count < 7) ||
-            (S && W && !SW && count < 7);
-        if (!required) {
-            p = 0.0f;
-        }
-    });
-}
-
-
-void apply_color_segmentation_at(image<float>& img, const float t) {
-    std::vector<int> histogram(256, 0);
-
-    int count = img.width() * img.height();
-    img.for_each_pixel([&](auto& p) {
-        assert(p >= 0);
-        int v = static_cast<int>(p * 256);
-        v = std::min(255, v);
-        histogram[v]++;
-    });
-    int black_count = t * count;
-    float threshold = 0;
-    
-    int sum = 0;
-    for (int i = 0; i < 256; i++) {
-        sum += histogram[i];        
-
-        if (sum >= black_count) {
-            threshold = static_cast<float>(i) / 256.0f;
-            break;
-        }
-    }
-    
-    img.for_each_pixel([&](auto& p) {
-        if (p >= threshold) {
-            p = 1.0f;
-        } else {
-            p = 0.0f;
-        }
-    });
-}
 
 #include <vector>
 #include <queue>
@@ -267,84 +119,6 @@ std::vector<std::pair<image<float>, image<float>>> extract_components(const auto
     return result;
 }
 
-void shuffle_shape_library(std::vector<image<float>>& imgs) {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-
-    std::vector<std::pair<float, image<float>>> scores;
-    for (const auto& img : imgs) {
-        float size = img.width() * img.height();
-        scores.push_back({dist(gen) * size, img});
-    }
-
-    std::sort(scores.begin(), scores.end(), [](const auto& a, const auto& b) {
-        return a.first > b.first; 
-    });
-
-    imgs.clear();
-    for (const auto& [score, img] : scores) {
-        imgs.push_back(img);
-    }
-}
-
-size_t non_zero_count(const image<float>& img) {
-    size_t result = 0;
-    img.for_each_pixel([&](auto& p) {
-        result += (p > 0);
-    });
-    return result;
-}
-
-
-image<float> combine_until(const std::vector<image<float>>& imgs, const int width, const int height) {
-    image<float> result(width, height);
-    int total_non_zeros = 0;
-    int non_zero_threshold = width * height * 0.5;
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-
-    size_t main_island_index = imgs.size() * 0.90 + imgs.size() * 0.10 * dist(gen);
-    main_island_index = std::min(imgs.size() - 1, main_island_index);
-    main_island_index = imgs.size() - 1;
-
-    auto main_island = imgs[main_island_index].copy();
-
-    main_island = main_island.rescale(width * 0.75, height * 0.75);
-
-    int x = result.width() / 2 - main_island.width() / 2;
-    int y = result.height() / 2 - main_island.height() / 2;
-
-    if (auto tile = result.subregion(x, y, main_island.width(), main_island.height())) {
-        main_island.copy_to(*tile);
-    }
-    
-    for (const auto& tile : imgs) {
-        int new_non_zeros = non_zero_count(tile);
-        if (total_non_zeros + new_non_zeros < non_zero_threshold) {
-            bool retry = true;
-            int n = 0;
-            while (retry && n < 100) {
-                auto x = static_cast<int>(dist(gen) * (width - 1 - tile.width()));
-                auto y = static_cast<int>(dist(gen) * (height - 1 - tile.height()));
-
-                if (auto sr = result.subregion(x, y, tile.width(), tile.height())) {
-                    if (non_zero_count(*sr) == 0) {
-                        retry = false;
-                        total_non_zeros += new_non_zeros;
-                        tile.copy_to(*sr);
-                    }
-                }
-                n++;
-            }
-        }
-    }
-
-    scale_range(result);
-    return result;
-}
-
 #include <random>
 #include <algorithm>
 
@@ -359,298 +133,6 @@ image<float> combine_until(const std::vector<image<float>>& imgs, const int widt
 #include <random>
 #include <queue>
 #include <algorithm>
-
-struct Point { int x, y; };
-
-// Helper function to find a non-border pixel in a component
-Point find_interior_point(const auto& img, int label, int min_x, int min_y, int max_x, int max_y) {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::vector<Point> interior_points;
-
-    for(int y = min_y + 1; y < max_y; y++) {
-        for(int x = min_x + 1; x < max_x; x++) {
-            if(static_cast<int>(img.at(x, y)) == label) {
-                bool is_interior = true;
-                for(int dy = -1; dy <= 1 && is_interior; dy++) {
-                    for(int dx = -1; dx <= 1; dx++) {
-                        if(static_cast<int>(img.at(x + dx, y + dy)) != label) {
-                            is_interior = false;
-                            break;
-                        }
-                    }
-                }
-                if(is_interior) interior_points.push_back({x, y});
-            }
-        }
-    }
-
-    if(interior_points.empty()) {
-        // Fallback to any pixel of the component if no interior found
-        for(int y = min_y; y <= max_y; y++) {
-            for(int x = min_x; x <= max_x; x++) {
-                if(static_cast<int>(img.at(x, y)) == label) {
-                    return {x, y};
-                }
-            }
-        }
-    }
-
-    std::uniform_int_distribution<> dis(0, interior_points.size() - 1);
-    return interior_points[dis(gen)];
-}
-
-// Compute distances using BFS
-void compute_distances(const auto& img, Point seed, int label,
-                      std::vector<std::vector<int>>& distances,
-                      int min_x, int min_y, int width, int height) {
-    std::queue<Point> q;
-    distances[seed.y - min_y][seed.x - min_x] = 0;
-    q.push(seed);
-
-    const int dx[] = {-1, 0, 1, 0};
-    const int dy[] = {0, -1, 0, 1};
-
-    while(!q.empty()) {
-        Point p = q.front();
-        q.pop();
-
-        for(int i = 0; i < 4; i++) {
-            int nx = p.x + dx[i];
-            int ny = p.y + dy[i];
-
-            if(nx >= min_x && nx < min_x + width &&
-               ny >= min_y && ny < min_y + height &&
-               static_cast<int>(img.at(nx, ny)) == label &&
-               distances[ny - min_y][nx - min_x] == -1) {
-                distances[ny - min_y][nx - min_x] = distances[p.y - min_y][p.x - min_x] + 1;
-                q.push({nx, ny});
-            }
-        }
-    }
-}
-
-auto apply_fade_extension(auto& img) {
-    image<float> distances(img.width(), img.height());
-
-    img.for_each_pixel([&](auto p, auto x, auto y) {
-        if (p > 0) {
-            distances.at(x, y) = 0.0f;
-        } else {
-            distances.at(x, y) = img.width() + img.height();
-        }
-    });
-
-    bool update = true;
-    auto update_call = [&](const float p, const float s) {
-        if (s + 1 < p) {
-            update = true;
-            return s + 1;
-        } else {
-            return p;
-        }
-    };
-    while (update) {
-        update = false;
-        distances.for_each_pixel([&](auto& p, auto x, auto y) {
-            if (p != 0) {
-                if (auto top = distances.get(x, y - 1)) {
-                    p = update_call(p, **top);
-                }
-                if (auto bot = distances.get(x, y + 1)) {
-                    p = update_call(p, **bot);
-                }
-                if (auto left = distances.get(x - 1, y)) {
-                    p = update_call(p, **left);
-                }
-                if (auto right = distances.get(x + 1, y)) {
-                    p = update_call(p, **right);
-                }
-            }
-        });
-    }
-
-    scale_range(distances);
-
-    invert_image(distances);
-
-    img = distances;
-}
-
-auto extract_complete_components(auto& img, const auto& src) {
-    // 1. Choose random 512x512 window
-    std::random_device rd;
-    std::mt19937 gen(rd());
-
-    // 2. Collect all labels in the random window
-    std::set<int> labels;
-    bool retry = true;
-
-    while (retry) {
-        labels.clear();
-        retry = false;
-
-        std::uniform_int_distribution<> dis_x(512, img.width() - 512);
-        std::uniform_int_distribution<> dis_y(512, img.height() - 512);
-
-        int start_x = dis_x(gen);
-        int start_y = dis_y(gen);
-
-        int non_zeros = 0;
-        int totals = 0;
-
-        for(int y = start_y; y < start_y + 512 && y < img.height(); ++y) {
-            for(int x = start_x; x < start_x + 512 && x < img.width(); ++x) {
-                float val = img.at(x, y);
-                if(val > 0.0f) {  // Ignore background (0)
-                    labels.insert(static_cast<int>(val));
-                    non_zeros++;
-                }
-                totals++;
-            }
-        }
-
-        retry = non_zeros*3 < totals;
-        std::cout << non_zeros << " " << totals << std::endl;
-    }
-
-    labels.erase(1);
-
-    // 3. Find bounding box for all components with these labels
-    int min_x = img.width(), min_y = img.height();
-    int max_x = 0, max_y = 0;
-    bool first = true;
-
-    // Update labels set with all labels in the expanded region
-    std::set<int> expanded_labels;
-
-    img.for_each_pixel([&](auto p, auto x, auto y) {
-        if(p > 0.0f && labels.count(static_cast<int>(p))) {
-            min_x = std::min(min_x, static_cast<int>(x));
-            min_y = std::min(min_y, static_cast<int>(y));
-            max_x = std::max(max_x, static_cast<int>(x));
-            max_y = std::max(max_y, static_cast<int>(y));
-            first = false;
-        }
-    });
-
-    if(first) {  // No components found
-        return *img.subregion(0, 0, 1, 1);  // Return minimal region
-    }
-
-
-{
-    // Make bounding box rectangular by making width equal to height
-    int width = max_x - min_x + 1;
-    int height = max_y - min_y + 1;
-    int max_size = std::max(width, height);
-
-    // Adjust bounds while ensuring we don't exceed image dimensions
-    int x_adjustment = (max_size - width) / 2;
-    int y_adjustment = (max_size - height) / 2;
-
-    min_x = std::max(0, min_x - x_adjustment);
-    min_y = std::max(0, min_y - y_adjustment);
-
-    max_x = min_x + max_size - 1;
-    max_y = min_y + max_size - 1;
-
-    // Ensure we don't exceed image boundaries
-    if(max_x >= img.width()) {
-        int overflow = max_x - (img.width() - 1);
-        max_x = img.width() - 1;
-        min_x = std::max(0, min_x - overflow);
-    }
-
-    if(max_y >= img.height()) {
-        int overflow = max_y - (img.height() - 1);
-        max_y = img.height() - 1;
-        min_y = std::max(0, min_y - overflow);
-    }
-}
-
-
-    // Get all labels in the expanded bounding box
-    for(int y = min_y; y <= max_y; ++y) {
-        for(int x = min_x; x <= max_x; ++x) {
-            float val = img.at(x, y);
-            if(val > 0.0f) {
-                expanded_labels.insert(static_cast<int>(val));
-            }
-        }
-    }
-    expanded_labels.erase(1);
-
-    // 4. Find complete components within this bounding box
-    std::set<int> complete_labels;
-
-    // For each label in the expanded region, check if it's complete
-    for(int label : expanded_labels) {
-        bool is_complete = true;
-        bool found = false;
-
-        // Check the borders of the bounding box
-        // Top and bottom borders
-        for(int x = min_x; x <= max_x && is_complete; ++x) {
-            if(x < 0 || x >= img.width()) continue;
-            if(min_y > 0 && static_cast<int>(img.at(x, min_y - 1)) == label) {
-                is_complete = false;
-            }
-            if(max_y + 1 < img.height() && static_cast<int>(img.at(x, max_y + 1)) == label) {
-                is_complete = false;
-            }
-        }
-
-        // Left and right borders
-        for(int y = min_y; y <= max_y && is_complete; ++y) {
-            if(y < 0 || y >= img.height()) continue;
-            if(min_x > 0 && static_cast<int>(img.at(min_x - 1, y)) == label) {
-                is_complete = false;
-            }
-            if(max_x + 1 < img.width() && static_cast<int>(img.at(max_x + 1, y)) == label) {
-                is_complete = false;
-            }
-            for(int x = min_x; x <= max_x; ++x) {
-                if(static_cast<int>(img.at(x, y)) == label) {
-                    found = true;
-                }
-            }
-        }
-
-        if(is_complete && found) {
-            complete_labels.insert(label);
-        }
-    }
-
-    // 5. Create new image with only complete components
-    int width = max_x - min_x + 1;
-    int height = max_y - min_y + 1;
-    auto result = img.subregion(min_x, min_y, width, height)->copy();
-    result.for_each_pixel([&](auto& p, auto x, auto y) {
-        int label = static_cast<int>(p);
-        if(label == 0 || !complete_labels.count(label)) {
-            p = 0.0f;
-        } else {
-            p = 1.0f;
-        }
-    });
-
-    auto src_window = src.subregion(min_x, min_y, width, height)->copy();
-    //invert_image(src_window);
-    ////apply_fade_extension(result);
-
-    //result.for_each_pixel([&](auto& p, auto x, auto y) {
-    //    p = src_window.at(x, y);
-
-    //    p = p * p;
-    //    p = p * p;
-    //    p = p * p;
-    //    p = 1.0 / (1.0 + std::exp(-0.5 * (p * 12 - 6)));
-    //});
-
-    return result;
-}
-
 
 
 enum direction {
@@ -874,7 +356,6 @@ std::vector<std::pair<int, int>> find_single_path(const image<float>& src, const
 }
 
 
-
 void apply_circular_shift(image<float>& target, const image<float>& map, const image<float>& circle, const int x, const int y) {
     auto dx = circle.width() / 2;
     auto dy = circle.height() / 2;
@@ -891,18 +372,6 @@ void apply_circular_shift(image<float>& target, const image<float>& map, const i
     }
 }
 
-void apply_circular_add(image<float>& target, const float color, const image<float>& circle, const int x, const int y) {
-    auto dx = circle.width() / 2;
-    auto dy = circle.height() / 2;
-
-    for (auto yi = 0; yi < circle.height(); yi++) {
-        for (auto xi = 0; xi < circle.width(); xi++) {
-            if (auto t = target.get(x - dx + xi, y - dy + yi)) {
-                **t = std::max(**t, color * circle.at(xi, yi));
-            }
-        }
-    }
-}
 void apply_circular_set(image<float>& target, const float color, const image<float>& circle, const int x, const int y) {
     auto dx = circle.width() / 2;
     auto dy = circle.height() / 2;
@@ -917,7 +386,6 @@ void apply_circular_set(image<float>& target, const float color, const image<flo
         }
     }
 }
-
 
 void traverse_paths(image<float>& map, const image<std::pair<direction, float>>& path_map) {
     std::random_device rd;
@@ -983,163 +451,6 @@ void traverse_paths(image<float>& map, const image<std::pair<direction, float>>&
 
 }
 
-void draw_curly_split_line(image<float>& image, const float p, const int y, const int margin) {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-
-    std::uniform_real_distribution<float> dis(0, 1.0);
-
-    auto current_y = y - margin + dis(gen) * 2 *  margin;
-        if (current_y < 0) {
-            current_y = 0;
-        }
-        if (current_y > image.height() - 1) {
-            current_y = image.height() - 1;
-        }
-
-
-    for (int x = 0; x < image.width(); x++) {
-        image.at(x, current_y) = p;
-
-        auto delta = y - current_y;
-        auto relative_delta = static_cast<float>(std::abs(delta)) / margin;
-        relative_delta = 0.5;
-        auto r = dis(gen);
-
-        if (r < relative_delta) {
-            // move to base line
-            if (y < current_y) {
-                current_y--;
-            } else {
-                current_y++;
-            }
-        } else {
-            // move from base line
-            if (y < current_y) {
-                current_y++;
-            } else {
-                current_y--;
-            }
-        }
-        if (current_y < y - margin) {
-            current_y = y - margin;
-        }
-        if (current_y > y + margin) {
-            current_y = y + margin;
-        }
-
-        if (current_y < 0) {
-            current_y = 0;
-        }
-        if (current_y > image.height() - 1) {
-            current_y = image.height() - 1;
-        }
-    }
-}
-
-void fill_split_lines(image<float>& image, const float d) {
-    //image.for_each_pixel([&](auto& p, auto x, auto y) {
-    //    if (p == 0) {
-    //        if (y == 0) {
-    //            p = d;
-    //        } else {
-    //            p = image.at(x, y - 1);
-    //        }
-    //    }
-    //});
-    for (int x = 0; x < image.width(); x++) {
-        int start = 0;
-        for (int y = 0; y < image.height(); y++) {
-            if (image.at(x, y) != 0 || y == image.height() - 1) {
-                auto delta = image.at(x, y) - image.at(x, start);
-                if (y == image.height() - 1) {
-                    delta = 1.0f - image.at(x, start);
-                }
-                auto dy = delta / (y - start + 1);
-                for (int i = 0; i < y - start; i++) {
-                    image.at(x, start + i) = image.at(x, start) + i * dy; 
-                }
-                start = y;
-            }
-        }
-    }
-}
-
-#include <cmath>
-
-double map_value(double value) {
-    return value * value;
-    if (value <= 0.8) {
-        // Logarithmische Funktion für den Bereich [0, 0.8]
-        return std::log(value + 1) / std::log(1.8);
-    } else {
-        // Exponentielle Funktion für den Bereich (0.8, 1]
-        return std::pow(1.8, value - 0.8);
-    }
-}
-
-
-#include "voronoi.h"
-
-#include <random>
-#include <vector>
-#include <cmath>
-
-class TerrainGenerator {
-private:
-    std::mt19937 rng;
-
-    // Noise function for more natural-looking terrain
-    float perlin(float x, float y, int seed) {
-        // Simplified perlin-like noise for demonstration
-        float val = sin(x * 0.1f + seed) * cos(y * 0.1f + seed);
-        val += 0.5f * sin(x * 0.2f + seed + 0.5f) * cos(y * 0.2f + seed + 0.5f);
-        return val * 0.5f + 0.5f;
-    }
-
-public:
-    TerrainGenerator(int seed) : rng(seed) {}
-    voronoi_generator v;
-    auto generate(int width, int height) {
-        // Generate initial points for continents
-        int num_continents = 5;
-        std::uniform_real_distribution<float> dist_x(width * 0.2f, width * 0.8f);
-        std::uniform_real_distribution<float> dist_y(height * 0.2f, height * 0.8f);
-
-        // Place continent centers
-        std::vector<std::pair<float, float>> continent_centers;
-        for (int i = 0; i < num_continents; i++) {
-            float x = dist_x(rng);
-            float y = dist_y(rng);
-            continent_centers.push_back({x, y});
-
-            // Add the main continent point
-            v.add(x, y);
-
-            // Add surrounding points for the continent
-            int points_per_continent = 20;
-            std::normal_distribution<float> local_dist(0, width * 0.1f);
-
-            for (int j = 0; j < points_per_continent; j++) {
-                float local_x = x + local_dist(rng);
-                float local_y = y + local_dist(rng);
-                v.add(local_x, local_y);
-            }
-        }
-
-        // Add some random islands
-        int num_islands = 15;
-        for (int i = 0; i < num_islands; i++) {
-            v.add(dist_x(rng), dist_y(rng));
-        }
-
-        // Generate the Voronoi diagram
-        auto voronoi = v.generate(width, height);
-
-
-        return voronoi;
-    }
-};
 
 image<float> create_mountain_feature(const image<float>& weights, const image<float>& noise) {
     auto map = weights.copy();
@@ -1215,39 +526,6 @@ image<float> create_mountain_feature(const image<float>& weights, const image<fl
 
 
     scale_range(result);
-
-    return result;
-}
-
-image<float> mask_to_border_regions(const image<float>& image, const int regions) {
-    voronoi_generator v;
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> dis_x(0, image.width());
-    std::uniform_int_distribution<int> dis_y(0, image.height());
-
-    for (int i = 0; i < regions; i++) {
-        bool retry = true;
-        int n = 0;
-
-        while (retry && n < 1000000) {
-            auto x = dis_x(gen);
-            auto y = dis_y(gen);
-
-            if (!v.contains(x, y) && image.contains(x, y) && image.at(x, y) == 0) {
-                retry = false;
-                v.add(x, y);                
-            }
-            n++;
-        }
-    }
-    auto result = v.generate(image.width(), image.height());
-
-    result.for_each_pixel([&](auto& p, auto x, auto y) {
-        if (image.at(x, y) == 0) {
-            p = 0;
-        }
-    });
 
     return result;
 }
@@ -1377,55 +655,136 @@ std::pair<image<float>, image<float>> generate_river_depth(const image<float>& r
     return {copy, levels};
 }
 
+#include <thread>
+#include <mutex>
+#include <iostream>
+
+image<float> random_pattern_tile(const std::vector<image<float>>& terrains, std::mt19937& gen, const int width, const int height) {
+    std::uniform_int_distribution<int> dis_terrain(0, terrains.size() - 1);
+
+    auto tile = terrains[dis_terrain(gen)];
+    std::uniform_real_distribution<float> dis(0.1, 0.7);
+
+    auto threshold = dis(gen);
+
+    if (threshold == 0) {
+        threshold = 0.1;
+    }
+    tile.for_each_pixel([&](float& m) {
+        if (m > threshold) {
+            //m = 1.0;
+        } else {
+            m = threshold;
+        }
+    });
+
+    scale_range(tile);
+
+    return tile;
+}
+
+image<float> generate_segment(const std::vector<image<float>>& terrains, const int width, const int height) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
+    image<float> map(width * 2, height * 2);
+    std::uniform_int_distribution<int> dis_width(0, width);
+    std::uniform_int_distribution<int> dis_height(0, height);
+    std::uniform_real_distribution<float> dis(0, 1.0);
+
+    for (int i = 0; i < 128; i++) {
+        auto tile = random_pattern_tile(terrains, gen, width, height);
+        auto b = dis(gen);
+        auto x = dis_width(gen);
+        auto y = dis_height(gen);
+
+        if (auto subregion = map.subregion(x, y, width, height)) {
+            subregion->for_each_pixel([&](auto& c, auto x, auto y) {
+                //c = std::max(c, b * tile.at(x, y));
+                c += std::max(0.0f, b * tile.at(x, y));
+            });
+        }
+    }
+    scale_range(map);
+    return map;
+}
+image<float> generate_base_world(const int width, const int height, const int scale, const float fade_factor, const float threshold, const float noise_factor) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
+    image<float> map(width * 2 * scale, height * 2 * scale);
+
+    std::vector<image<float>> tiles;
+    std::vector<image<float>> terrains;
+    std::vector<std::thread> threads;
+    std::mutex mutex;
+
+    int target = 512; //scale * scale;
+
+    for (int i = 0; i < std::min(8, target); i++) {
+        std::thread t1([&]() {
+            std::unique_lock ul(mutex);
+            while (true) {
+                if (terrains.size() > target) {
+                    return;
+                }
+                ul.unlock();
+                image<float> terrain = generate_terrain(width, height);
+                ul.lock();
+                terrains.push_back(std::move(terrain));
+                std::cout << terrains.size() << std::endl;
+            }
+        });
+
+        threads.push_back(std::move(t1));
+    }
+
+    for (auto& t : threads) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+
+    for (int i = 0; i < scale * scale; i++) {
+        tiles.push_back(generate_segment(terrains, width, height));
+    }
+
+    int i = 0;
+    for (int y = 0; y < scale; y++) {
+        for (int x = 0; x < scale; x++) {
+            image<float>& tile = tiles[i];
+            i++;
+            if (auto region = map.subregion(
+                x * tile.width() - 512 * x,
+                y * tile.height() - 512 * y,
+                tile.width(),
+                tile.height()
+            )) {
+                (*region).add(tile);
+            }
+        }
+    }
+    scale_range(map);
+
+    if (auto result = map.subregion(0, 0, (scale + 1) * width, (scale + 1) * height)) {
+        return *result;
+    }
+    return map;
+}
+
 
 int main() {
     int width = 512;
     int height = 512;
     int scale = 20;
+    //auto asd = generate_base_world(width, height, scale, 0.1, 0.4, 0.1);
 
-    auto result = *import_ppm<float>("region.ppm");
-    //result.for_each_pixel([&](auto& p, auto x, auto y) {
-    //    if (x >= result.width() / 2 + 2000) {
-    //        p = 0.0;
-    //    } else if (x >= result.width() / 2 + 1000) {
-    //        auto dx = x - (result.width() / 2 + 1000);
-
-    //        if (p < 0.001f * dx) {
-    //            p = 0.0f;
-    //        }
-    //    } else if (x >= result.width() / 2 - 1000 + 1000) {
-    //        auto dx = x - (result.width() / 2 - 1000 + 1000);
-
-    //        if (p < 1.0 - 0.001f * dx) {
-    //            p = 0.0f;
-    //        }
-    //    } else {
-    //        p = 0;
-    //    }
-    //    //if (y >= result.width() / 2 + 1000) {
-    //    //    p = 0.0;
-    //    //} else if (y >= result.width() / 2) {
-    //    //    auto dx = y - (result.width() / 2);
-
-    //    //    if (p < 0.001f * dx) {
-    //    //        p = 0.0f;
-    //    //    }
-    //    //} else if (y >= result.width() / 2 - 1000) {
-    //    //    auto dx = y - (result.width() / 2 - 1000);
-
-    //    //    if (p < 1.0 - 0.001f * dx) {
-    //    //        p = 0.0f;
-    //    //    }
-    //    //} else {
-    //    //    p = 0;
-    //    //}
-    //});
-    //export_ppm("asd.ppm", result);
+    //export_ppm("region2.ppm", asd);
     //return 0;
 
 
+    auto result = *import_ppm<float>("region2.ppm");
     auto segment = result.copy();
-    //apply_color_segmentation_at(segment, 0.5);
     segment.for_each_pixel([](auto& p) {
          if (p > 0.5) {
              p = 1;
@@ -1433,18 +792,13 @@ int main() {
              p = 0;
          }
     });
-    //invert_image(segment);
     label_connected_components(segment);
     auto tiles = extract_components(segment, result);
 
-    //shuffle_shape_library(tiles);
-    //auto csl = combine_until(tiles, 1024, 1024);
-    //export_ppm("csl.ppm", csl);
-
     auto [mask, weights] = *(tiles.rbegin() + 0);
 
-    mask = center_reformat_image(mask, width, height);
-    weights = center_reformat_image(weights, width, height);
+    mask = resize_and_center(mask, width, height);
+    weights = resize_and_center(weights, width, height);
     
     mask.for_each_pixel([&](auto& p) {
         if (p < 0.000001f) {
@@ -1463,7 +817,6 @@ int main() {
             p = 0.0f;
         }
     });
-
 
     export_ppm("blub.ppm", blub);
     auto idk = mask_to_regions(mask, 20);
@@ -1515,31 +868,6 @@ int main() {
     //auto tiles = extract_components(segment, result);
     export_ppm("water_zones.ppm", water_zones);
     /////////////////////////
-
-
-
-    //auto blub_weights = weights.copy();
-    //scale_range(blub_weights);
-    //auto blub_scale = *result.subregion(result.width() / 2 - blub_weights.width() / 2, result.height() / 2 - blub_weights.height() / 2, blub_weights.width(), blub_weights.height());
-
-    blub_weights.for_each_pixel([&](auto& p, auto x, auto y) {
-        //if (p < 0.01) {
-        //    p = 0.0;
-        //}
-        //if (mask.at(x, y) == 0) {
-        //    p = 0.0f;
-        //}
-    //    if (p > 0) {
-    //        p = p * p;
-    //        p = p * p;
-    //        p = 1.0 / (1.0 + std::exp(-0.5 * (p * 12 - 6)));
-
-    //        auto s = blub_scale.at(x, y);
-    //        p = (p + s * p) / 2;
-    //    }
-    });
-    //scale_range(blub_weights);
-
     auto wet_map = generate_wetness(mask);
     export_ppm("wet_map.ppm", wet_map);
 
@@ -1567,11 +895,6 @@ int main() {
 
     scale_range(blub_r);
     scale_range(water);
-
-    auto moisture_map = generate_moisture(water, blub_weights);
-    scale_range(moisture_map);
-    export_ppm("moisture_map.ppm", moisture_map);
-
 
 
     auto scaled_water = blub.copy_shape();
@@ -1637,7 +960,6 @@ int main() {
         return false;
     };
     export_ppm("pre_water.ppm", water);
-    //remove_redundant_line(water);
     std::vector<std::pair<size_t, size_t>> end_points;
     water.for_each_pixel([&](auto& p, auto x, auto y) {
         if (p == 0) {
@@ -1681,45 +1003,45 @@ int main() {
 
         int cross = 0;
         if (top >= 0 && bot >= 0) {
-            draw_manhattan_line(scaled_water, top_x, top_y, bot_x, bot_y, p);
+            draw_random_manhattan_line(scaled_water, top_x, top_y, bot_x, bot_y, p);
             cross++;
         }
         if (left >= 0 && right >= 0) {
-            draw_manhattan_line(scaled_water, left_x, left_y, right_x, right_y, p);
+            draw_random_manhattan_line(scaled_water, left_x, left_y, right_x, right_y, p);
             cross++;
         }
         if (top >= 0 && left >= 0 && cross < 2) {
-            draw_manhattan_line(scaled_water, top_x, top_y, left_x, left_y, p);
+            draw_random_manhattan_line(scaled_water, top_x, top_y, left_x, left_y, p);
         }
         if (top >= 0 && right >= 0 && cross < 2 && left < 0) {
-            draw_manhattan_line(scaled_water, top_x, top_y, right_x, right_y, p);
+            draw_random_manhattan_line(scaled_water, top_x, top_y, right_x, right_y, p);
         }
         if (bot >= 0 && left >= 0 && cross < 2 && top < 0) {
-            draw_manhattan_line(scaled_water, bot_x, bot_y, left_x, left_y, p);
+            draw_random_manhattan_line(scaled_water, bot_x, bot_y, left_x, left_y, p);
         }
         if (bot >= 0 && right >= 0 && cross < 2 && top < 0 && left < 0) {
-            draw_manhattan_line(scaled_water, bot_x, bot_y, right_x, right_y, p);
+            draw_random_manhattan_line(scaled_water, bot_x, bot_y, right_x, right_y, p);
         }
         if (top >= 0 && bot < 0 && right < 0 && left < 0) {
-            draw_manhattan_line(scaled_water, top_x, top_y, center_x, center_y, p);
+            draw_random_manhattan_line(scaled_water, top_x, top_y, center_x, center_y, p);
             if (blub_weights.at(x, y) == 0) {
                 end_points.push_back({center_x, center_y});
             }
         }
         if (top < 0 && bot >= 0 && right < 0 && left < 0) {
-            draw_manhattan_line(scaled_water, bot_x, bot_y, center_x, center_y, p);
+            draw_random_manhattan_line(scaled_water, bot_x, bot_y, center_x, center_y, p);
             if (blub_weights.at(x, y) == 0) {
                 end_points.push_back({center_x, center_y});
             }
         }
         if (top < 0 && bot < 0 && right >= 0 && left < 0) {
-            draw_manhattan_line(scaled_water, right_x, right_y, center_x, center_y, p);
+            draw_random_manhattan_line(scaled_water, right_x, right_y, center_x, center_y, p);
             if (blub_weights.at(x, y) == 0) {
                 end_points.push_back({center_x, center_y});
             }
         }
         if (top < 0 && bot < 0 && right < 0 && left >= 0) {
-            draw_manhattan_line(scaled_water, left_x, left_y, center_x, center_y, p);
+            draw_random_manhattan_line(scaled_water, left_x, left_y, center_x, center_y, p);
             if (blub_weights.at(x, y) == 0) {
                 end_points.push_back({center_x, center_y});
             }
@@ -1757,7 +1079,7 @@ int main() {
         auto [mask, weights] = tiles[index];
         auto size = std::min(lake_size_dis(lake_gen), static_cast<int>(mask.width()));
         auto lake_shape = mask.rescale(std::max(2, size), std::max(2.0f, (static_cast<float>(mask.height()) / mask.width()) * size));
-        lake_shape = center_reformat_image(lake_shape, lake_shape.width() + 128, lake_shape.height() + 128);
+        lake_shape = resize_and_center(lake_shape, lake_shape.width() + 128, lake_shape.height() + 128);
 
         std::uniform_int_distribution<int> lake_shape_connector_x(0, lake_shape.width() - 1);
         std::uniform_int_distribution<int> lake_shape_connector_y(0, lake_shape.height() - 1);
@@ -1825,243 +1147,6 @@ int main() {
     export_ppm("river_scaled_map.ppm", river_scaled_map);
     export_ppm("weights.ppm", weights);
     export_ppm("blub_weights.ppm", blub_weights);
-
-
-
-    return 0;
-
-/*
-    altitude.for_each_pixel([&](auto& p, auto x, auto y) {
-        p = p * p;
-        //p = p * p;
-        ////p = p * p;
-        p = 1.0 / (1.0 + std::exp(-0.5 * (p * 12 - 6)));
-    });
-
-    scale_range(altitude);
-    for (int i = 0; i < 25; i++) {
-        //add_gaussian_blur(altitude);
-    }
-    scale_range(altitude);
-
-    auto path_map = find_paths(altitude);
-    traverse_paths(altitude, path_map);
-    scale_range(altitude);
-
-    altitude = altitude.rescale(result.width(), result.height());
-
-    result.for_each_pixel([&](auto& p, auto x, auto y) {
-        auto s = altitude.at(x, y);
-
-        if (s > 0) {
-            p = (s + s * p) / 2;
-        } else {
-            p = 0;
-        }
-    });
-
-    scale_range(result);
-
-    export_ppm("what_is_this.ppm", result);
-
-
-
-    scale_range(blub_r);
-    scale_range(water);
-
-
-    export_ppm("blub_r.ppm", blub_r);
-    export_ppm("water.ppm", water);
-    export_ppm("weights.ppm", weights);
-
-
-    return 0;
-
-
-    auto map = extract_complete_components(segment, result);
-    export_ppm("1.ppm", map);
-    return 0;
-
-    scale_range(result);
-    scale_range(map);
-
-    for (int i = 0; i < 25; i++) {
-        add_gaussian_blur(map);
-    }
-    //for (int i = 0; i < 4; i++) {
-    //    map.for_each_pixel([](auto& p) {
-    //        p = p * p;
-    //    });
-    //    add_gaussian_blur(map);
-    //}
-    scale_range(map);
-
-{
-    auto path_map = find_paths(map);
-    traverse_paths(map, path_map);
-    scale_range(map);
-}
-
-    export_ppm("final_map.ppm", map);
-    return 0;
-
-    map = map.rescale(result.width(), result.height());
-
-    result.for_each_pixel([&](auto& p, auto x, auto y) {
-        auto s = map.at(x, y);
-
-        if (s > 0) {
-            p = (s + s * p) / 2;
-        } else {
-            p = 0;
-        }
-    });
-
-    scale_range(result);
-
-    export_ppm("what_is_this.ppm", result);
-    export_ppm("what_is_this2.ppm", map);
-
-    return 0;
-    */
-
-/*
-    image<float> result(width, height);
-
-    draw_curly_split_line(result, 0.1, 64,  32);
-    draw_curly_split_line(result, 0.2, 128, 32);
-    draw_curly_split_line(result, 0.3, 192, 32);
-    draw_curly_split_line(result, 0.5, 256, 32);
-    draw_curly_split_line(result, 0.7, 320, 32);
-    draw_curly_split_line(result, 0.8, 384, 32);
-    draw_curly_split_line(result, 0.9, 448, 32);
-
-    fill_split_lines(result, 0);
-    add_gaussian_blur(result);
-    add_gaussian_blur(result);
-    add_gaussian_blur(result);
-    add_gaussian_blur(result);
-    add_gaussian_blur(result);
-    scale_range(result);
-
-    image<float> terrain = generate_terrain(width, height);
-
-    add_gaussian_blur(terrain);
-    add_gaussian_blur(terrain);
-
-    terrain.for_each_pixel([](auto& p) {
-        //p = p * p;
-        if (p < 0.30) {
-            p = 0;
-        } else {
-            p -= 0.30;
-        }
-    });
-
-    scale_range(terrain);
-    terrain.for_each_pixel([](auto& p) {
-        p = p * p;
-    });
-    int min_x = std::numeric_limits<int>::max();
-    int min_y = std::numeric_limits<int>::max();
-    int max_x = std::numeric_limits<int>::min();
-    int max_y = std::numeric_limits<int>::min();
-
-    terrain.for_each_pixel([&](auto& p, int x, int y) {
-        if (p > 0.01) {
-            min_x = std::min(min_x, x);
-            min_y = std::min(min_y, y);
-            max_x = std::max(max_x, x);
-            max_y = std::max(max_y, y);
-        }
-    });
-    terrain = *terrain.subregion(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1);
-    terrain = terrain.rescale(result.width(), result.height());
-    result.for_each_pixel([&](auto& p, auto x, auto y) {
-        //p = (p + terrain.at(x, y)) / 2.0;
-        p *= (1.0f - terrain.at(x, y));
-        if (terrain.at(x, y) == 0) {
-            p = 0;
-        }
-    });
-    scale_range(result);
-
-
-
-
-
-
-    export_ppm("region.ppm", result);
-
-    return 0;
-    */
-
-
-    //auto result2 = generate_base_world(width, height, scale, 0.1, 0.4, 0.1);
-    //export_ppm("region.ppm", result2);
-    //return 0;
-
-    image<float> terrain = generate_unfaded_terrain(width, height);
-    //auto result = *import_ppm<float>("region.ppm");
-
-    //add_gaussian_blur(terrain);
-    //add_gaussian_blur(terrain);
-
-    //terrain.for_each_pixel([](auto& p) {
-    //    //p = p * p;
-    //    if (p < 0.30) {
-    //        p = 0;
-    //    } else {
-    //        p -= 0.30;
-    //    }
-    //});
-
-    //scale_range(terrain);
-    //int min_x = std::numeric_limits<int>::max();
-    //int min_y = std::numeric_limits<int>::max();
-    //int max_x = std::numeric_limits<int>::min();
-    //int max_y = std::numeric_limits<int>::min();
-
-    //terrain.for_each_pixel([&](auto& p, int x, int y) {
-    //    if (p > 0) {
-    //        min_x = std::min(min_x, x);
-    //        min_y = std::min(min_y, y);
-    //        max_x = std::max(max_x, x);
-    //        max_y = std::max(max_y, y);
-    //    }
-    //});
-    //terrain = *terrain.subregion(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1);
-    //terrain.for_each_pixel([](auto& p) {
-    //    p = p * p;
-    //});
-    //scale_range(terrain);
-    export_ppm("what_is_this.ppm", terrain);
-    //terrain = terrain.rescale(result.width(), result.height());
-
-/*
-    result.for_each_pixel([&](auto& p, auto x, auto y) {
-        if (terrain.contains(x, y)) {
-            auto s = terrain.at(x, y);
-
-            if (s > 0) {
-                p = (s + s * p) / 2;
-            } else {
-                p = 0;
-            }
-        }
-    });
-    */
-
-    //scale_range(result);
-    //export_ppm("what_is_this.ppm", result);
-
-/*
-    auto path_map = find_paths(result);
-    traverse_paths(result, path_map);
-    scale_range(result);
-
-    export_ppm("final_map.ppm", result);
-    */
 
     return 0;
 }
