@@ -1,57 +1,23 @@
 #include <vector>
 #include <iostream>
 
-#include <random>
-
 #include "export_ppm.h"
-#include "circle_stack.h"
 #include "helper.h"
-
 #include "config.h"
 
-#include "../../cmd/loading_bar.h"
-
-
-#include <cassert>
-#include <cmath>
-#include <random>
-
-#include "altitude_generator.h"
-#include "wetness_generator.h"
-
+#include "generators/noise.h"
 #include "generators/shapes.h"
 #include "generators/terrain.h"
-
-#include <random>
-#include <algorithm>
-
-
-#include <vector>
-#include <set>
-#include <random>
-#include <algorithm>
-
-#include <vector>
-#include <set>
-#include <random>
-#include <queue>
-#include <algorithm>
-
 #include "generators/water.h"
-
-
-
-
-
-
+#include "generators/biome.h"
 
 int main() {
     int width = 512;
     int height = 512;
     int scale = 20;
-    //auto asd = generate_base_world(width, height, scale, 0.1, 0.4, 0.1);
+    auto asd = mapgen::generators::noise::generate(width, height, scale, 0.1, 0.4, 0.1);
 
-    //export_ppm("region2.ppm", asd);
+    export_ppm("region2.ppm", asd);
     //return 0;
 
 
@@ -60,8 +26,14 @@ int main() {
     auto [mask, terrain] = mapgen::generators::terrain::generate(shapes, result, width, height);
     auto [a, b] = mapgen::generators::water::generate(mask, terrain, shapes);
 
+    auto biomes = mapgen::generators::biome::generate(terrain.rescale(width, height), b.rescale(width, height));
+
     export_ppm("rwd.ppm", a);
     export_ppm("blub_r.ppm", b);
+    export_ppm("cells.ppm", biomes.cells);
+    export_ppm("temperature.ppm", biomes.temperature);
+    export_ppm("moisture.ppm", biomes.moisture);
+    export_ppm("altitude.ppm", biomes.altitude);
 
     return 0;
 }

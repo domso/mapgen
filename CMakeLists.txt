@@ -11,11 +11,11 @@ add_executable(mapgen
     src/generators/noise.cpp 
     src/generators/terrain.cpp 
     src/generators/water.cpp 
+    src/generators/moisture.cpp 
+    src/generators/temperature.cpp 
+    src/generators/biome.cpp 
     src/main.cpp 
 
-    src/temperature_generator.cpp
-    src/moisture_generator.cpp
-    src/biome_generator.cpp
     src/circle_stack.cpp
 )
 
