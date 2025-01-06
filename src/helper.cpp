@@ -1,10 +1,5 @@
 #include "helper.h"
 
-bool random_percentage(std::mt19937& gen, const int percent) {
-    std::uniform_int_distribution<int> dis(1, 100);
-    return dis(gen) <= percent;
-}
-
 float calc_distance(const int x, const int y, const int half_size, const int i, const int j) {
     int diff_x = x - (x - half_size + i);
     int diff_y = y - (y - half_size + j);
@@ -54,66 +49,6 @@ void scale_range(image<float>& img) {
     });
 }
 
-std::pair<int, int> min_random_neighbor(std::mt19937& gen, const image<float>& map, const int x, const int y) {
-    std::pair<int, int> result = {x, y};
-    float min = map.at(x, y);
-
-    for (int dy = -1; dy < 2; dy++) {
-        for (int dx = -1; dx < 2; dx++) {
-            if (map.contains(x + dx, y + dy)) {
-                if (map.at(x + dx, y + dy) < min && random_percentage(gen, 50)) {
-                    result = {x + dx, y + dy};
-                    min = map.at(x + dx, y + dy);
-                }
-            }
-
-        }
-    }
-    
-    return result;
-}
-
-std::pair<int, int> min_neighbor(const image<float>& map, const int x, const int y) {
-    std::pair<int, int> result = {x, y};
-    float min = map.at(x, y);
-
-    for (int dy = -1; dy < 2; dy++) {
-        for (int dx = -1; dx < 2; dx++) {
-            if (map.contains(x + dx, y + dy)) {
-                if (map.at(x + dx, y + dy) < min) {
-                    result = {x + dx, y + dy};
-                    min = map.at(x + dx, y + dy);
-                }
-            }
-
-        }
-    }
-    
-    return result;
-}
-
-image<float> downscale_img(const image<float>& src, const size_t dest_width, const size_t dest_height) {
-    image<float> result(dest_width, dest_height, 0.0);
-
-    result.for_each_pixel([&](float& p, const size_t x, const size_t y) {
-        auto vertical_fraction = static_cast<double>(y) / dest_height;
-        auto horizontal_fraction = static_cast<double>(x) / dest_width;
-
-        auto src_x = static_cast<size_t>(horizontal_fraction * src.width());
-        auto src_y = static_cast<size_t>(vertical_fraction * src.height());
-
-        if (src.contains(src_x, src_y)) {
-            p = src.at(src_x, src_y);
-        }
-    });
-
-    add_gaussian_blur(result);
-    add_gaussian_blur(result);
-    add_gaussian_blur(result);
-    add_gaussian_blur(result);
-
-    return result;
-}
 
 image<float> extract_non_zero_region(const image<float>& img) {
     size_t min_x = img.width();
@@ -494,4 +429,40 @@ void fade_borders(image<float>& map, const int range) {
             map.at(x, y) *= scale;
         }
     }    
+}
+
+image<int> generate_ocean_distance_map(const image<float>& mask) {
+    image<int> result(mask.width(), mask.height());
+
+    std::queue<std::pair<int, int>> remaining;
+
+    mask.for_each_pixel([&](auto p, int x, int y) {
+        if (p == 0) {
+            result.at(x, y) = 0;
+            remaining.push({x, y});
+        } else {
+            result.at(x, y) = mask.width() * mask.height();
+        }
+    });
+
+    auto check_pos = [&](const auto current, const auto x, const auto y) {
+        if (auto p = result.get(x, y)) {
+            if (current + 1 < **p) {
+                **p = current + 1;
+                remaining.push({x, y});
+            }
+        }
+    };
+
+    while (!remaining.empty()) {
+        auto [x, y] = remaining.front();
+        auto current = result.at(x, y);
+        check_pos(current, x + 1, y);
+        check_pos(current, x - 1, y);
+        check_pos(current, x, y + 1);
+        check_pos(current, x, y - 1);
+        remaining.pop();
+    }
+
+    return result; 
 }

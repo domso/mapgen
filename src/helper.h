@@ -6,19 +6,11 @@
 #include "image.h"
 #include "voronoi.h"
 
-bool random_percentage(std::mt19937& gen, const int percent);
-
 float calc_distance(const int x, const int y, const int half_size, const int i, const int j);
 
 void add_gaussian_blur(image<float>& img);
 
 void scale_range(image<float>& img);
-
-std::pair<int, int> min_random_neighbor(std::mt19937& gen, const image<float>& map, const int x, const int y);
-
-std::pair<int, int> min_neighbor(const image<float>& map, const int x, const int y);
-
-image<float> downscale_img(const image<float>& src, const size_t dest_width, const size_t dest_height);
 
 image<float> extract_non_zero_region(const image<float>& img);
 
@@ -50,3 +42,5 @@ image<float> resize_and_center(const image<float>& img, const size_t width, cons
 void draw_random_manhattan_line(image<float>& img, const int start_x, const int start_y, const int end_x, const int end_y, const float color);
 
 void fade_borders(image<float>& map, const int range);
+
+image<int> generate_ocean_distance_map(const image<float>& mask);
